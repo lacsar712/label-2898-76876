@@ -11,7 +11,8 @@ from datetime import timedelta, datetime
 import random
 from decimal import Decimal
 
-from .models import GoodsVariety, GoodsOutbound, generate_outbound_no
+from .models import GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no
+from django.db.models import Max, Sum
 
 
 def user_login(request):
@@ -340,3 +341,141 @@ def api_outbound_export_csv(request):
         ])
 
     return response
+
+
+STOCK_CRITICAL_THRESHOLD = 5
+STOCK_LOW_THRESHOLD = 20
+
+
+def get_stock_status(quantity):
+    q = float(quantity) if quantity else 0
+    if q <= STOCK_CRITICAL_THRESHOLD:
+        return '紧缺'
+    elif q <= STOCK_LOW_THRESHOLD:
+        return '偏低'
+    return '正常'
+
+
+@login_required
+def inventory_page(request):
+    return render(request, 'pages/inventory.html', {
+        'title': '库存台账',
+        'page_name': 'inventory',
+    })
+
+
+@login_required
+def api_inventory_overview(request):
+    total_varieties = GoodsVariety.objects.count()
+    total_stock = GoodsVariety.objects.aggregate(total=Sum('stock_quantity'))['total'] or Decimal('0')
+    critical_count = sum(
+        1 for v in GoodsVariety.objects.all()
+        if float(v.stock_quantity) <= STOCK_CRITICAL_THRESHOLD
+    )
+    return JsonResponse({
+        'total_varieties': total_varieties,
+        'total_stock': str(total_stock),
+        'critical_count': critical_count,
+    })
+
+
+@login_required
+def api_inventory_list(request):
+    category_id = request.GET.get('category_id', '')
+    keyword = request.GET.get('keyword', '').strip()
+    group_by_category = request.GET.get('group_by_category', 'false') == 'true'
+
+    qs = GoodsVariety.objects.select_related('category', 'unit').all()
+
+    if category_id and category_id != 'all':
+        try:
+            qs = qs.filter(category_id=int(category_id))
+        except ValueError:
+            pass
+
+    if keyword:
+        qs = qs.filter(name__icontains=keyword)
+
+    qs = qs.order_by('stock_quantity')
+
+    varieties = []
+    for v in qs:
+        last_in = v.inbound_records.filter(status='completed').aggregate(latest=Max('inbound_date'))['latest']
+        last_out = v.outbound_records.filter(status='completed').aggregate(latest=Max('outbound_date'))['latest']
+        varieties.append({
+            'id': v.id,
+            'name': v.name,
+            'stock_quantity': str(v.stock_quantity),
+            'unit': v.unit.name,
+            'category_id': v.category.id,
+            'category': v.category.name,
+            'last_inbound': last_in.strftime('%Y-%m-%d') if last_in else '',
+            'last_outbound': last_out.strftime('%Y-%m-%d') if last_out else '',
+            'status': get_stock_status(v.stock_quantity),
+        })
+
+    categories = [{'id': 0, 'name': '全部'}]
+    for c in GoodsCategory.objects.all():
+        categories.append({'id': c.id, 'name': c.name})
+
+    grouped = {}
+    if group_by_category:
+        for item in varieties:
+            cat = item['category']
+            if cat not in grouped:
+                grouped[cat] = []
+            grouped[cat].append(item)
+
+    return JsonResponse({
+        'varieties': varieties,
+        'categories': categories,
+        'grouped': grouped if group_by_category else {},
+    })
+
+
+@login_required
+def api_inventory_flow(request, variety_id):
+    try:
+        variety = GoodsVariety.objects.select_related('category', 'unit').get(pk=variety_id)
+    except GoodsVariety.DoesNotExist:
+        return JsonResponse({'error': '品种不存在'}, status=404)
+
+    inbound_records = []
+    for r in variety.inbound_records.filter(status='completed').order_by('-inbound_date', '-id')[:20]:
+        inbound_records.append({
+            'id': r.id,
+            'type': '入库',
+            'no': r.inbound_no,
+            'quantity': str(r.quantity),
+            'counterparty': r.supplier or '-',
+            'operator': r.operator or '-',
+            'date': r.inbound_date.strftime('%Y-%m-%d'),
+            'remark': r.remark or '',
+        })
+
+    outbound_records = []
+    for r in variety.outbound_records.filter(status='completed').order_by('-outbound_date', '-id')[:20]:
+        outbound_records.append({
+            'id': r.id,
+            'type': '出库',
+            'no': r.outbound_no,
+            'quantity': str(r.quantity),
+            'counterparty': r.receiving_unit or '-',
+            'operator': r.operator or r.receiver,
+            'date': r.outbound_date.strftime('%Y-%m-%d'),
+            'remark': r.remark or '',
+        })
+
+    all_flows = inbound_records + outbound_records
+    all_flows.sort(key=lambda x: x['date'], reverse=True)
+
+    return JsonResponse({
+        'variety': {
+            'id': variety.id,
+            'name': variety.name,
+            'category': variety.category.name,
+            'unit': variety.unit.name,
+            'stock_quantity': str(variety.stock_quantity),
+        },
+        'flows': all_flows,
+    })

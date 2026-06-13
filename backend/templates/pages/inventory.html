@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/inventory.css">
+{% endblock %}
+
+{% block content %}
+<div class="inventory-container">
+
+    <div class="inventory-kpi-row">
+        <div class="kpi-card" id="kpi-total-variety">
+            <div class="kpi-header">
+                <span class="kpi-label">品种总数</span>
+                <div class="kpi-icon icon-variety"><i class="bi bi-grid-3x3-gap"></i></div>
+            </div>
+            <div class="kpi-skeleton">
+                <div class="skeleton skeleton-value"></div>
+                <div class="skeleton skeleton-label"></div>
+            </div>
+            <div class="kpi-content" style="display:none">
+                <div class="kpi-value accent-blue">0</div>
+                <div class="kpi-sub">涵盖全部品类</div>
+            </div>
+        </div>
+
+        <div class="kpi-card" id="kpi-total-stock">
+            <div class="kpi-header">
+                <span class="kpi-label">库存总量</span>
+                <div class="kpi-icon icon-stock"><i class="bi bi-box-seam"></i></div>
+            </div>
+            <div class="kpi-skeleton">
+                <div class="skeleton skeleton-value"></div>
+                <div class="skeleton skeleton-label"></div>
+            </div>
+            <div class="kpi-content" style="display:none">
+                <div class="kpi-value accent-green">0</div>
+                <div class="kpi-sub">全部物资合计</div>
+            </div>
+        </div>
+
+        <div class="kpi-card" id="kpi-critical">
+            <div class="kpi-header">
+                <span class="kpi-label">紧缺品种</span>
+                <div class="kpi-icon icon-critical"><i class="bi bi-exclamation-triangle"></i></div>
+            </div>
+            <div class="kpi-skeleton">
+                <div class="skeleton skeleton-value"></div>
+                <div class="skeleton skeleton-label"></div>
+            </div>
+            <div class="kpi-content" style="display:none">
+                <div class="kpi-value accent-red">0</div>
+                <div class="kpi-sub">需及时补给</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="inventory-list-panel">
+        <div class="panel-title">
+            <i class="bi bi-journal-text"></i> 库存全景
+            <div class="panel-actions">
+                <button id="btn-toggle-group" class="btn-tech btn-sm">
+                    <i class="bi bi-list-ul"></i> <span>切换按品类分组</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="inventory-toolbar">
+            <div class="category-tabs" id="category-tabs">
+            </div>
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" id="search-input" class="input-tech search-input" placeholder="搜索品种名称...">
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="inventory-table" id="inventory-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;"></th>
+                        <th>品种名称</th>
+                        <th>当前库存</th>
+                        <th>计量单位</th>
+                        <th>所属品类</th>
+                        <th>最近入库日期</th>
+                        <th>最近出库日期</th>
+                        <th>库存状态</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-tbody">
+                    <tr class="empty-row">
+                        <td colspan="8">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-footer">
+            <span id="list-info" class="list-info">共 0 条记录</span>
+            <span class="sort-hint">默认按库存数量升序排列，优先展示紧缺物资</span>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/inventory.js"></script>
+{% endblock %}

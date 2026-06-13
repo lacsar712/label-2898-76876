@@ -25,4 +25,8 @@ urlpatterns = [
     path('api/outbound/create/', views.api_outbound_create, name='api-outbound-create'),
     path('api/outbound/list/', views.api_outbound_list, name='api-outbound-list'),
     path('api/outbound/export-csv/', views.api_outbound_export_csv, name='api-outbound-export-csv'),
+    path('inventory/', views.inventory_page, name='inventory'),
+    path('api/inventory/overview/', views.api_inventory_overview, name='api-inventory-overview'),
+    path('api/inventory/list/', views.api_inventory_list, name='api-inventory-list'),
+    path('api/inventory/flow/<int:variety_id>/', views.api_inventory_flow, name='api-inventory-flow'),
 ]
