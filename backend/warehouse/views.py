@@ -14,6 +14,7 @@ from decimal import Decimal
 from .models import (
     GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
     Warehouse, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
+    Supplier, SupplierRatingLog,
 )
 from django.db.models import Max, Sum
 
@@ -977,3 +978,516 @@ def api_transfer_execute(request, order_id):
             'execute_time': order.execute_time.strftime('%Y-%m-%d %H:%M:%S'),
         },
     })
+
+
+@login_required
+def supplier_page(request):
+    return render(request, 'pages/supplier.html', {
+        'title': '供应商管理',
+        'page_name': 'supplier',
+    })
+
+
+@login_required
+def api_supplier_categories(request):
+    categories = GoodsCategory.objects.all()
+    data = []
+    for c in categories:
+        data.append({
+            'id': c.id,
+            'name': c.name,
+        })
+    return JsonResponse({'categories': data})
+
+
+@login_required
+def api_supplier_list(request):
+    status = request.GET.get('status', '')
+    rating = request.GET.get('rating', '')
+    keyword = request.GET.get('keyword', '').strip()
+
+    qs = Supplier.objects.prefetch_related('categories').all()
+
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+    if rating and rating != 'all':
+        qs = qs.filter(rating=rating)
+    if keyword:
+        qs = qs.filter(
+            Q(code__icontains=keyword) |
+            Q(name__icontains=keyword) |
+            Q(contact_person__icontains=keyword)
+        )
+
+    suppliers = []
+    for s in qs:
+        categories = []
+        for c in s.categories.all():
+            categories.append({'id': c.id, 'name': c.name})
+        suppliers.append({
+            'id': s.id,
+            'code': s.code,
+            'name': s.name,
+            'contact_person': s.contact_person,
+            'phone': s.phone,
+            'address': s.address,
+            'categories': categories,
+            'status': s.get_status_display(),
+            'status_code': s.status,
+            'rating': s.rating,
+            'cooperation_date': s.cooperation_date.strftime('%Y-%m-%d'),
+            'remark': s.remark,
+        })
+
+    return JsonResponse({
+        'suppliers': suppliers,
+        'total': len(suppliers),
+    })
+
+
+@login_required
+def api_supplier_detail(request, supplier_id):
+    try:
+        s = Supplier.objects.prefetch_related('categories', 'rating_logs').get(pk=supplier_id)
+    except Supplier.DoesNotExist:
+        return JsonResponse({'error': '供应商不存在'}, status=404)
+
+    categories = []
+    for c in s.categories.all():
+        categories.append({'id': c.id, 'name': c.name})
+
+    rating_logs = []
+    for log in s.rating_logs.all():
+        rating_logs.append({
+            'id': log.id,
+            'old_rating': log.old_rating,
+            'new_rating': log.new_rating,
+            'operator': log.operator,
+            'remark': log.remark,
+            'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        })
+
+    supplier_data = {
+        'id': s.id,
+        'code': s.code,
+        'name': s.name,
+        'contact_person': s.contact_person,
+        'phone': s.phone,
+        'address': s.address,
+        'categories': categories,
+        'status': s.get_status_display(),
+        'status_code': s.status,
+        'rating': s.rating,
+        'cooperation_date': s.cooperation_date.strftime('%Y-%m-%d'),
+        'remark': s.remark,
+        'created_at': s.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'updated_at': s.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+    return JsonResponse({
+        'supplier': supplier_data,
+        'rating_logs': rating_logs,
+    })
+
+
+@login_required
+@transaction.atomic
+def api_supplier_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    code = data.get('code', '').strip()
+    name = data.get('name', '').strip()
+    contact_person = data.get('contact_person', '').strip()
+    phone = data.get('phone', '').strip()
+    address = data.get('address', '').strip()
+    category_ids = data.get('category_ids', [])
+    status = data.get('status', Supplier.STATUS_ACTIVE)
+    rating = data.get('rating', Supplier.RATING_B)
+    cooperation_date = data.get('cooperation_date', '')
+    remark = data.get('remark', '').strip()
+
+    if not code or not name:
+        return JsonResponse({'success': False, 'message': '供应商编码和名称不能为空'})
+
+    if Supplier.objects.filter(code=code).exists():
+        return JsonResponse({'success': False, 'message': '供应商编码已存在'})
+
+    if cooperation_date:
+        try:
+            datetime.strptime(cooperation_date, '%Y-%m-%d')
+        except ValueError:
+            return JsonResponse({'success': False, 'message': '合作日期格式错误'})
+    else:
+        cooperation_date = timezone.now().strftime('%Y-%m-%d')
+
+    supplier = Supplier.objects.create(
+        code=code,
+        name=name,
+        contact_person=contact_person,
+        phone=phone,
+        address=address,
+        status=status,
+        rating=rating,
+        cooperation_date=cooperation_date,
+        remark=remark,
+    )
+
+    if category_ids:
+        valid_categories = GoodsCategory.objects.filter(id__in=category_ids)
+        supplier.categories.set(valid_categories)
+
+    SupplierRatingLog.objects.create(
+        supplier=supplier,
+        old_rating=rating,
+        new_rating=rating,
+        operator=request.user.username if request.user.is_authenticated else 'system',
+        remark='创建供应商，初始评级',
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '供应商创建成功',
+        'data': {'id': supplier.id, 'code': supplier.code},
+    })
+
+
+@login_required
+@transaction.atomic
+def api_supplier_update(request, supplier_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        supplier = Supplier.objects.select_for_update().get(pk=supplier_id)
+    except Supplier.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '供应商不存在'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    code = data.get('code', '').strip()
+    name = data.get('name', '').strip()
+    contact_person = data.get('contact_person', '').strip()
+    phone = data.get('phone', '').strip()
+    address = data.get('address', '').strip()
+    category_ids = data.get('category_ids', [])
+    status = data.get('status', supplier.status)
+    rating = data.get('rating', supplier.rating)
+    cooperation_date = data.get('cooperation_date', '')
+    remark = data.get('remark', '').strip()
+    rating_remark = data.get('rating_remark', '').strip()
+
+    if not code or not name:
+        return JsonResponse({'success': False, 'message': '供应商编码和名称不能为空'})
+
+    if Supplier.objects.filter(code=code).exclude(pk=supplier_id).exists():
+        return JsonResponse({'success': False, 'message': '供应商编码已存在'})
+
+    if cooperation_date:
+        try:
+            datetime.strptime(cooperation_date, '%Y-%m-%d')
+        except ValueError:
+            return JsonResponse({'success': False, 'message': '合作日期格式错误'})
+
+    old_rating = supplier.rating
+
+    supplier.code = code
+    supplier.name = name
+    supplier.contact_person = contact_person
+    supplier.phone = phone
+    supplier.address = address
+    supplier.status = status
+    supplier.rating = rating
+    if cooperation_date:
+        supplier.cooperation_date = cooperation_date
+    supplier.remark = remark
+    supplier.save()
+
+    if category_ids is not None:
+        valid_categories = GoodsCategory.objects.filter(id__in=category_ids)
+        supplier.categories.set(valid_categories)
+
+    if old_rating != rating:
+        SupplierRatingLog.objects.create(
+            supplier=supplier,
+            old_rating=old_rating,
+            new_rating=rating,
+            operator=request.user.username if request.user.is_authenticated else 'system',
+            remark=rating_remark or '评级变更',
+        )
+
+    return JsonResponse({
+        'success': True,
+        'message': '供应商更新成功',
+        'data': {'id': supplier.id, 'code': supplier.code},
+    })
+
+
+@login_required
+@transaction.atomic
+def api_supplier_delete(request, supplier_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        supplier = Supplier.objects.get(pk=supplier_id)
+    except Supplier.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '供应商不存在'}, status=404)
+
+    supplier_name = supplier.name
+    supplier.delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'供应商【{supplier_name}】已删除',
+    })
+
+
+@login_required
+def api_supplier_active_list(request):
+    qs = Supplier.objects.filter(
+        status=Supplier.STATUS_ACTIVE
+    ).prefetch_related('categories').order_by('code')
+
+    suppliers = []
+    for s in qs:
+        suppliers.append({
+            'id': s.id,
+            'code': s.code,
+            'name': s.name,
+        })
+
+    return JsonResponse({'suppliers': suppliers})
+
+
+def generate_inbound_no():
+    today = timezone.now().strftime('%Y%m%d')
+    prefix = f'RK{today}'
+    last = GoodsInbound.objects.filter(
+        inbound_no__startswith=prefix,
+    ).order_by('-inbound_no').first()
+    if last:
+        seq = int(last.inbound_no[-3:]) + 1
+    else:
+        seq = 1
+    return f'{prefix}{seq:03d}'
+
+
+@login_required
+def goods_entry_page(request):
+    return render(request, 'pages/goods_entry.html', {
+        'title': '货物入库',
+        'page_name': 'goods-entry',
+    })
+
+
+@login_required
+def api_inbound_varieties(request):
+    varieties = GoodsVariety.objects.select_related('category', 'unit').all()
+    data = []
+    for v in varieties:
+        data.append({
+            'id': v.id,
+            'name': v.name,
+            'category': v.category.name,
+            'unit': v.unit.name,
+            'stock_quantity': str(v.stock_quantity),
+        })
+    return JsonResponse({'varieties': data})
+
+
+@login_required
+@transaction.atomic
+def api_inbound_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    variety_id = data.get('variety_id')
+    quantity = data.get('quantity')
+    supplier_id = data.get('supplier_id')
+    inbound_date = data.get('inbound_date')
+    operator = data.get('operator', '').strip()
+    remark = data.get('remark', '').strip()
+
+    if not all([variety_id, quantity, inbound_date]):
+        return JsonResponse({'success': False, 'message': '必填字段不能为空'})
+
+    try:
+        quantity = Decimal(str(quantity))
+        if quantity <= 0:
+            return JsonResponse({'success': False, 'message': '入库数量必须大于零'})
+    except Exception:
+        return JsonResponse({'success': False, 'message': '入库数量格式错误'})
+
+    try:
+        variety = GoodsVariety.objects.select_for_update().get(pk=variety_id)
+    except GoodsVariety.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '物资品种不存在'})
+
+    supplier_ref = None
+    supplier_name = ''
+    if supplier_id:
+        try:
+            supplier_ref = Supplier.objects.get(pk=supplier_id)
+            if supplier_ref.status != Supplier.STATUS_ACTIVE:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'供应商【{supplier_ref.name}】当前状态为{supplier_ref.get_status_display()}，不可选为供货来源',
+                })
+            supplier_name = supplier_ref.name
+        except Supplier.DoesNotExist:
+            return JsonResponse({'success': False, 'message': '供应商不存在'})
+
+    try:
+        datetime.strptime(inbound_date, '%Y-%m-%d')
+    except ValueError:
+        return JsonResponse({'success': False, 'message': '入库日期格式错误'})
+
+    inbound_no = generate_inbound_no()
+
+    record = GoodsInbound.objects.create(
+        inbound_no=inbound_no,
+        variety=variety,
+        quantity=quantity,
+        supplier_ref=supplier_ref,
+        supplier=supplier_name,
+        inbound_date=inbound_date,
+        operator=operator,
+        remark=remark,
+        status='completed',
+    )
+
+    variety.stock_quantity += quantity
+    variety.save(update_fields=['stock_quantity'])
+
+    return JsonResponse({
+        'success': True,
+        'message': '入库登记成功',
+        'data': {
+            'inbound_no': record.inbound_no,
+            'variety_name': variety.name,
+            'quantity': str(record.quantity),
+            'new_stock': str(variety.stock_quantity),
+            'supplier': supplier_name or '未指定',
+        },
+    })
+
+
+@login_required
+def api_inbound_list(request):
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    keyword = request.GET.get('keyword', '').strip()
+
+    qs = GoodsInbound.objects.select_related('variety', 'variety__category', 'variety__unit', 'supplier_ref').all()
+
+    if date_from:
+        qs = qs.filter(inbound_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(inbound_date__lte=date_to)
+    if keyword:
+        qs = qs.filter(
+            Q(inbound_no__icontains=keyword) |
+            Q(variety__name__icontains=keyword) |
+            Q(supplier__icontains=keyword)
+        )
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    records = qs[start:end]
+
+    items = []
+    for r in records:
+        supplier_info = ''
+        if r.supplier_ref:
+            supplier_info = f'{r.supplier_ref.code} - {r.supplier_ref.name}'
+        elif r.supplier:
+            supplier_info = r.supplier
+        items.append({
+            'id': r.id,
+            'inbound_no': r.inbound_no,
+            'variety_name': r.variety.name,
+            'category': r.variety.category.name,
+            'unit': r.variety.unit.name,
+            'quantity': str(r.quantity),
+            'supplier': supplier_info,
+            'inbound_date': r.inbound_date.strftime('%Y-%m-%d'),
+            'operator': r.operator,
+            'remark': r.remark,
+            'status': r.get_status_display(),
+        })
+
+    return JsonResponse({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size if total > 0 else 0,
+    })
+
+
+@login_required
+def api_inbound_export_csv(request):
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    keyword = request.GET.get('keyword', '').strip()
+
+    qs = GoodsInbound.objects.select_related('variety', 'variety__category', 'variety__unit', 'supplier_ref').all()
+
+    if date_from:
+        qs = qs.filter(inbound_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(inbound_date__lte=date_to)
+    if keyword:
+        qs = qs.filter(
+            Q(inbound_no__icontains=keyword) |
+            Q(variety__name__icontains=keyword) |
+            Q(supplier__icontains=keyword)
+        )
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="inbound_records.csv"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow([
+        '入库单号', '物资品种', '品类', '计量单位', '入库数量',
+        '供应商', '入库日期', '经办入库员', '备注', '单据状态',
+    ])
+
+    for r in qs:
+        supplier_info = ''
+        if r.supplier_ref:
+            supplier_info = f'{r.supplier_ref.code} - {r.supplier_ref.name}'
+        elif r.supplier:
+            supplier_info = r.supplier
+        writer.writerow([
+            r.inbound_no,
+            r.variety.name,
+            r.variety.category.name,
+            r.variety.unit.name,
+            str(r.quantity),
+            supplier_info,
+            r.inbound_date.strftime('%Y-%m-%d'),
+            r.operator,
+            r.remark,
+            r.get_status_display(),
+        ])
+
+    return response

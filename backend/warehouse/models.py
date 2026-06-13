@@ -58,7 +58,12 @@ class GoodsInbound(models.Model):
         verbose_name='物资品种', related_name='inbound_records',
     )
     quantity = models.DecimalField('入库数量', max_digits=12, decimal_places=2)
-    supplier = models.CharField('供应商', max_length=100, blank=True, default='')
+    supplier_ref = models.ForeignKey(
+        Supplier, on_delete=models.PROTECT,
+        verbose_name='供应商', related_name='inbound_records',
+        null=True, blank=True,
+    )
+    supplier = models.CharField('供应商名称', max_length=100, blank=True, default='')
     inbound_date = models.DateField('入库日期', default=timezone.now)
     operator = models.CharField('经办入库员', max_length=30, blank=True, default='')
     remark = models.TextField('备注', blank=True, default='')
@@ -79,6 +84,8 @@ class GoodsInbound(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        if self.supplier_ref and not self.supplier:
+            self.supplier = self.supplier_ref.name
         super().save(*args, **kwargs)
         if is_new and self.status == 'completed':
             self.variety.stock_quantity += self.quantity
@@ -285,3 +292,83 @@ class TransferOrderLog(models.Model):
 
     def __str__(self):
         return f'{self.transfer_order.transfer_no} - {self.get_action_display()}'
+
+
+class Supplier(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_PAUSED = 'paused'
+    STATUS_TERMINATED = 'terminated'
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, '合作中'),
+        (STATUS_PAUSED, '暂停'),
+        (STATUS_TERMINATED, '终止'),
+    ]
+
+    RATING_A = 'A'
+    RATING_B = 'B'
+    RATING_C = 'C'
+
+    RATING_CHOICES = [
+        (RATING_A, 'A'),
+        (RATING_B, 'B'),
+        (RATING_C, 'C'),
+    ]
+
+    code = models.CharField('供应商编码', max_length=30, unique=True)
+    name = models.CharField('供应商名称', max_length=100)
+    contact_person = models.CharField('联系人', max_length=30, blank=True, default='')
+    phone = models.CharField('电话', max_length=20, blank=True, default='')
+    address = models.CharField('地址', max_length=200, blank=True, default='')
+    categories = models.ManyToManyField(
+        GoodsCategory,
+        verbose_name='供应品类',
+        related_name='suppliers',
+        blank=True,
+    )
+    status = models.CharField(
+        '合作状态',
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    rating = models.CharField(
+        '评级',
+        max_length=5,
+        choices=RATING_CHOICES,
+        default=RATING_B,
+    )
+    cooperation_date = models.DateField('合作起始日期', default=timezone.now)
+    remark = models.TextField('备注', blank=True, default='')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '供应商'
+        verbose_name_plural = '供应商'
+        ordering = ['code']
+
+    def __str__(self):
+        return f'{self.code} - {self.name}'
+
+
+class SupplierRatingLog(models.Model):
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.CASCADE,
+        verbose_name='供应商',
+        related_name='rating_logs',
+    )
+    old_rating = models.CharField('原评级', max_length=5, choices=Supplier.RATING_CHOICES)
+    new_rating = models.CharField('新评级', max_length=5, choices=Supplier.RATING_CHOICES)
+    operator = models.CharField('操作人', max_length=30)
+    remark = models.TextField('变更备注', blank=True, default='')
+    created_at = models.DateTimeField('变更时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '供应商评级变更记录'
+        verbose_name_plural = '供应商评级变更记录'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'{self.supplier.name} {self.old_rating}→{self.new_rating}'

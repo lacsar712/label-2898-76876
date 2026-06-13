@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/supplier.css">
+{% endblock %}
+
+{% block content %}
+<div class="supplier-container">
+
+    <div class="supplier-toolbar-panel">
+        <div class="panel-title">
+            <i class="bi bi-truck"></i> 供应商管理
+            <div class="panel-actions">
+                <button id="btn-add-supplier" class="btn-tech btn-sm">
+                    <i class="bi bi-plus-circle"></i> 新增供应商
+                </button>
+            </div>
+        </div>
+
+        <div class="supplier-filter-bar">
+            <div class="filter-item">
+                <label>合作状态</label>
+                <select id="filter-status" class="input-tech filter-input">
+                    <option value="all">全部状态</option>
+                    <option value="active">合作中</option>
+                    <option value="paused">暂停</option>
+                    <option value="terminated">终止</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>评级</label>
+                <select id="filter-rating" class="input-tech filter-input">
+                    <option value="all">全部评级</option>
+                    <option value="A">A 级</option>
+                    <option value="B">B 级</option>
+                    <option value="C">C 级</option>
+                </select>
+            </div>
+            <div class="filter-item filter-search">
+                <label>搜索</label>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="filter-keyword" class="input-tech search-input" placeholder="编码/名称/联系人">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button id="btn-filter" class="btn-tech btn-sm">查询</button>
+                <button id="btn-reset-filter" class="btn-tech btn-sm btn-cancel">重置</button>
+            </div>
+        </div>
+
+        <div class="filter-stats">
+            <span id="supplier-count" class="stats-text">共加载 0 家供应商</span>
+        </div>
+    </div>
+
+    <div class="supplier-cards-panel">
+        <div id="supplier-card-grid" class="supplier-card-grid">
+            <div class="empty-state-card">
+                <i class="bi bi-truck"></i>
+                <p>正在加载供应商数据...</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="supplier-detail-modal" class="detail-modal-overlay">
+    <div class="detail-modal-tech">
+        <div class="detail-modal-header">
+            <h3><i class="bi bi-building"></i> 供应商详情</h3>
+            <button class="detail-modal-close" id="detail-modal-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="detail-modal-body" id="detail-modal-body">
+        </div>
+    </div>
+</div>
+
+<div id="supplier-form-modal" class="form-modal-overlay">
+    <div class="form-modal-tech">
+        <div class="form-modal-header">
+            <h3 id="form-modal-title"><i class="bi bi-plus-circle"></i> 新增供应商</h3>
+            <button class="form-modal-close" id="form-modal-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="form-modal-body">
+            <form id="supplier-form" autocomplete="off">
+                {% csrf_token %}
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">供应商编码 <span class="required">*</span></label>
+                        <input type="text" id="form-code" class="input-tech" placeholder="请输入供应商编码" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">供应商名称 <span class="required">*</span></label>
+                        <input type="text" id="form-name" class="input-tech" placeholder="请输入供应商名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">联系人</label>
+                        <input type="text" id="form-contact" class="input-tech" placeholder="请输入联系人姓名">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">联系电话</label>
+                        <input type="text" id="form-phone" class="input-tech" placeholder="请输入联系电话">
+                    </div>
+                    <div class="form-group full-width">
+                        <label class="form-label">公司地址</label>
+                        <input type="text" id="form-address" class="input-tech" placeholder="请输入公司地址">
+                    </div>
+                    <div class="form-group full-width">
+                        <label class="form-label">供应品类</label>
+                        <div class="tag-select-wrapper" id="tag-select-wrapper">
+                            <div class="tag-selected-list" id="tag-selected-list"></div>
+                            <input type="text" id="tag-search-input" class="tag-search-input" placeholder="搜索或选择品类...">
+                            <div class="tag-dropdown" id="tag-dropdown"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">合作状态</label>
+                        <select id="form-status" class="input-tech">
+                            <option value="active">合作中</option>
+                            <option value="paused">暂停</option>
+                            <option value="terminated">终止</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">评级</label>
+                        <select id="form-rating" class="input-tech">
+                            <option value="A">A 级</option>
+                            <option value="B">B 级</option>
+                            <option value="C">C 级</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">合作起始日期</label>
+                        <input type="date" id="form-coop-date" class="input-tech">
+                    </div>
+                    <div class="form-group full-width">
+                        <label class="form-label" id="label-rating-remark" style="display:none">评级变更备注</label>
+                        <input type="text" id="form-rating-remark" class="input-tech" placeholder="评级变更时请填写备注原因" style="display:none">
+                    </div>
+                    <div class="form-group full-width">
+                        <label class="form-label">备注</label>
+                        <textarea id="form-remark" class="input-tech textarea-tech" rows="3" placeholder="请输入合作备注信息"></textarea>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="form-modal-footer">
+            <button id="form-cancel" class="btn-tech btn-cancel">取消</button>
+            <button id="form-submit" class="btn-tech">确认提交</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/supplier.js"></script>
+{% endblock %}
