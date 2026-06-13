@@ -1,26 +1,107 @@
 {% extends "base.html" %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/dev.css">
+<link rel="stylesheet" href="/static/css/dashboard.css">
 {% endblock %}
 
 {% block content %}
-<div class="dev-container">
-    <div class="dev-icon">
-        <i class="bi bi-speedometer2"></i>
-    </div>
-    <h1 class="dev-title">
-        仪表盘开发中 / DASHBOARD UNDER DEVELOPMENT
-    </h1>
-    <p class="dev-text">
-        兵团库房管理系统 - {{ title }} 模块正在构建中。<br>
-        当前系统环境：Django 4.2.7 | PostgreSQL 15 | 内部网络校验通过
-    </p>
+<div class="dashboard-grid">
 
-    <div class="pulse-dots">
-        <div class="pulse-dot"></div>
-        <div class="pulse-dot pulse-dot-2"></div>
-        <div class="pulse-dot pulse-dot-3"></div>
+    <div class="kpi-card" id="kpi-inbound">
+        <div class="kpi-header">
+            <span class="kpi-label">今日入库笔数</span>
+            <div class="kpi-icon icon-inbound"><i class="bi bi-box-arrow-in-down"></i></div>
+        </div>
+        <div class="kpi-skeleton">
+            <div class="skeleton skeleton-value"></div>
+            <div class="skeleton skeleton-label"></div>
+        </div>
+        <div class="kpi-content" style="display:none">
+            <div class="kpi-value">0</div>
+            <div class="kpi-sub">较昨日实时更新</div>
+        </div>
     </div>
+
+    <div class="kpi-card" id="kpi-variety">
+        <div class="kpi-header">
+            <span class="kpi-label">在库品种总数</span>
+            <div class="kpi-icon icon-variety"><i class="bi bi-grid-3x3-gap"></i></div>
+        </div>
+        <div class="kpi-skeleton">
+            <div class="skeleton skeleton-value"></div>
+            <div class="skeleton skeleton-label"></div>
+        </div>
+        <div class="kpi-content" style="display:none">
+            <div class="kpi-value">0</div>
+            <div class="kpi-sub">涵盖全部品类</div>
+        </div>
+    </div>
+
+    <div class="kpi-card" id="kpi-approval">
+        <div class="kpi-header">
+            <span class="kpi-label">待审批单据数</span>
+            <div class="kpi-icon icon-approval"><i class="bi bi-shield-check"></i></div>
+        </div>
+        <div class="kpi-skeleton">
+            <div class="skeleton skeleton-value"></div>
+            <div class="skeleton skeleton-label"></div>
+        </div>
+        <div class="kpi-content" style="display:none">
+            <div class="kpi-value">0</div>
+            <div class="kpi-sub">需及时处理</div>
+        </div>
+    </div>
+
+    <div class="kpi-card" id="kpi-alert">
+        <div class="kpi-header">
+            <span class="kpi-label">活跃预警数</span>
+            <div class="kpi-icon icon-alert"><i class="bi bi-exclamation-triangle"></i></div>
+        </div>
+        <div class="kpi-skeleton">
+            <div class="skeleton skeleton-value"></div>
+            <div class="skeleton skeleton-label"></div>
+        </div>
+        <div class="kpi-content" style="display:none">
+            <div class="kpi-value">0</div>
+            <div class="kpi-sub">库存 / 保质期预警</div>
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-panel" id="trend-chart">
+            <div class="chart-title"><i class="bi bi-graph-up"></i> 近 7 日入库趋势</div>
+            <div class="chart-container">
+                <div class="skeleton skeleton-chart"></div>
+                <div class="trend-svg-wrap" style="display:none"></div>
+            </div>
+        </div>
+        <div class="chart-panel" id="category-chart">
+            <div class="chart-title"><i class="bi bi-pie-chart"></i> 库存品类占比</div>
+            <div class="chart-container">
+                <div class="skeleton skeleton-chart"></div>
+                <div class="donut-svg-wrap" style="display:none"></div>
+                <div class="donut-legend" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="activity-row">
+        <div class="activity-panel" id="activity-panel">
+            <div class="activity-title"><i class="bi bi-clock-history"></i> 最近出入库动态</div>
+            <div class="activity-skeleton">
+                <div class="skeleton skeleton-row"></div>
+                <div class="skeleton skeleton-row"></div>
+                <div class="skeleton skeleton-row"></div>
+                <div class="skeleton skeleton-row"></div>
+                <div class="skeleton skeleton-row"></div>
+            </div>
+            <ul class="activity-list" style="display:none"></ul>
+        </div>
+    </div>
+
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/dashboard.js"></script>
 {% endblock %}
