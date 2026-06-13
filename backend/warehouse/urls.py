@@ -50,4 +50,10 @@ urlpatterns = [
     path('api/supplier/update/<int:supplier_id>/', views.api_supplier_update, name='api-supplier-update'),
     path('api/supplier/delete/<int:supplier_id>/', views.api_supplier_delete, name='api-supplier-delete'),
     path('api/supplier/active-list/', views.api_supplier_active_list, name='api-supplier-active-list'),
+    path('zone/', views.zone_page, name='zone'),
+    path('api/zone/warehouses/', views.api_zone_warehouses, name='api-zone-warehouses'),
+    path('api/zone/list/', views.api_zone_list, name='api-zone-list'),
+    path('api/zone/detail/<int:zone_id>/', views.api_zone_detail, name='api-zone-detail'),
+    path('api/zone/create/', views.api_zone_create, name='api-zone-create'),
+    path('api/zone/update-status/<int:zone_id>/', views.api_zone_update_status, name='api-zone-update-status'),
 ]

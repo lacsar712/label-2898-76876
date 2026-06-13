@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/zone.css">
+{% endblock %}
+
+{% block content %}
+<div class="zone-container">
+
+    <div class="zone-toolbar-panel">
+        <div class="panel-title">
+            <i class="bi bi-layers"></i> 库房分区管理
+            <div class="panel-actions">
+                <button id="btn-add-zone" class="btn-tech btn-sm">
+                    <i class="bi bi-plus-circle"></i> 新增分区
+                </button>
+            </div>
+        </div>
+
+        <div class="zone-filter-bar">
+            <div class="filter-item">
+                <label>所属库房</label>
+                <select id="filter-warehouse" class="input-tech filter-input">
+                    <option value="all">全部库房</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>运行状态</label>
+                <select id="filter-status" class="input-tech filter-input">
+                    <option value="all">全部状态</option>
+                    <option value="normal">正常</option>
+                    <option value="maintenance">维护中</option>
+                    <option value="disabled">停用</option>
+                </select>
+            </div>
+            <div class="filter-item filter-search">
+                <label>搜索</label>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="filter-keyword" class="input-tech search-input" placeholder="编码/名称/负责人">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button id="btn-filter" class="btn-tech btn-sm">查询</button>
+                <button id="btn-reset-filter" class="btn-tech btn-sm btn-cancel">重置</button>
+            </div>
+        </div>
+
+        <div class="filter-stats">
+            <span id="zone-count" class="stats-text">共加载 0 个分区</span>
+        </div>
+    </div>
+
+    <div class="zone-cards-panel">
+        <div id="zone-card-grid" class="zone-card-grid">
+            <div class="empty-state-card">
+                <i class="bi bi-layers"></i>
+                <p>正在加载分区数据...</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="zone-detail-modal" class="detail-modal-overlay">
+    <div class="detail-modal-tech">
+        <div class="detail-modal-header">
+            <h3><i class="bi bi-layers"></i> 分区详情</h3>
+            <button class="detail-modal-close" id="detail-modal-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="detail-modal-body" id="detail-modal-body">
+        </div>
+    </div>
+</div>
+
+<div id="zone-form-modal" class="form-modal-overlay">
+    <div class="form-modal-tech">
+        <div class="form-modal-header">
+            <h3 id="form-modal-title"><i class="bi bi-plus-circle"></i> 新增分区</h3>
+            <button class="form-modal-close" id="form-modal-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="form-modal-body">
+            <form id="zone-form" autocomplete="off">
+                {% csrf_token %}
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">分区编码 <span class="required">*</span></label>
+                        <input type="text" id="form-code" class="input-tech" placeholder="请输入分区编码" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">分区名称 <span class="required">*</span></label>
+                        <input type="text" id="form-name" class="input-tech" placeholder="请输入分区名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">所属库房 <span class="required">*</span></label>
+                        <select id="form-warehouse" class="input-tech" required>
+                            <option value="">请选择库房</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">运行状态</label>
+                        <select id="form-status" class="input-tech">
+                            <option value="normal">正常</option>
+                            <option value="maintenance">维护中</option>
+                            <option value="disabled">停用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">面积(㎡)</label>
+                        <input type="number" id="form-area" class="input-tech" placeholder="请输入面积" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">容量上限</label>
+                        <input type="number" id="form-capacity" class="input-tech" placeholder="请输入容量上限" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">负责人</label>
+                        <input type="text" id="form-manager" class="input-tech" placeholder="请输入负责人">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">联系电话</label>
+                        <input type="text" id="form-phone" class="input-tech" placeholder="请输入联系电话">
+                    </div>
+                    <div class="form-group full-width">
+                        <label class="form-label">备注</label>
+                        <textarea id="form-remark" class="input-tech textarea-tech" rows="3" placeholder="请输入备注信息"></textarea>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="form-modal-footer">
+            <button id="form-cancel" class="btn-tech btn-cancel">取消</button>
+            <button id="form-submit" class="btn-tech">确认提交</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/zone.js"></script>
+{% endblock %}

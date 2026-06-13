@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from .models import (
     GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
-    Warehouse, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
+    Warehouse, WarehouseZone, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
     Supplier, SupplierRatingLog,
 )
 from django.db.models import Max, Sum
@@ -1491,3 +1491,230 @@ def api_inbound_export_csv(request):
         ])
 
     return response
+
+
+ZONE_CAPACITY_WARNING_RATIO = 0.85
+
+
+@login_required
+def zone_page(request):
+    return render(request, 'pages/zone.html', {
+        'title': '库房分区',
+        'page_name': 'zone',
+    })
+
+
+@login_required
+def api_zone_warehouses(request):
+    warehouses = Warehouse.objects.all()
+    data = []
+    for w in warehouses:
+        data.append({
+            'id': w.id,
+            'name': w.name,
+            'code': w.code,
+        })
+    return JsonResponse({'warehouses': data})
+
+
+@login_required
+def api_zone_list(request):
+    warehouse_id = request.GET.get('warehouse_id', '')
+    status = request.GET.get('status', '')
+    keyword = request.GET.get('keyword', '').strip()
+
+    qs = WarehouseZone.objects.select_related('warehouse').all()
+
+    if warehouse_id and warehouse_id != 'all':
+        try:
+            qs = qs.filter(warehouse_id=int(warehouse_id))
+        except ValueError:
+            pass
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+    if keyword:
+        qs = qs.filter(
+            Q(code__icontains=keyword) |
+            Q(name__icontains=keyword) |
+            Q(manager__icontains=keyword)
+        )
+
+    zones = []
+    for z in qs:
+        stocks = WarehouseStock.objects.filter(warehouse=z.warehouse).select_related('variety', 'variety__unit')
+        total_quantity = Decimal('0')
+        for s in stocks:
+            total_quantity += s.stock_quantity
+
+        utilization = 0
+        if z.capacity_limit and float(z.capacity_limit) > 0:
+            utilization = min(round(float(total_quantity) / float(z.capacity_limit) * 100, 1), 100)
+
+        is_warning = utilization >= ZONE_CAPACITY_WARNING_RATIO * 100
+
+        zones.append({
+            'id': z.id,
+            'code': z.code,
+            'name': z.name,
+            'warehouse_id': z.warehouse.id,
+            'warehouse_name': z.warehouse.name,
+            'area': str(z.area),
+            'capacity_limit': str(z.capacity_limit),
+            'current_usage': str(total_quantity),
+            'utilization': utilization,
+            'is_warning': is_warning,
+            'manager': z.manager,
+            'phone': z.phone,
+            'status': z.get_status_display(),
+            'status_code': z.status,
+            'remark': z.remark,
+        })
+
+    return JsonResponse({
+        'zones': zones,
+        'total': len(zones),
+    })
+
+
+@login_required
+def api_zone_detail(request, zone_id):
+    try:
+        z = WarehouseZone.objects.select_related('warehouse').get(pk=zone_id)
+    except WarehouseZone.DoesNotExist:
+        return JsonResponse({'error': '分区不存在'}, status=404)
+
+    stocks = WarehouseStock.objects.filter(warehouse=z.warehouse).select_related('variety', 'variety__category', 'variety__unit')
+    total_quantity = Decimal('0')
+    variety_items = []
+    for s in stocks:
+        total_quantity += s.stock_quantity
+        variety_items.append({
+            'variety_id': s.variety.id,
+            'variety_name': s.variety.name,
+            'category': s.variety.category.name,
+            'quantity': str(s.stock_quantity),
+            'unit': s.variety.unit.name,
+        })
+
+    utilization = 0
+    if z.capacity_limit and float(z.capacity_limit) > 0:
+        utilization = min(round(float(total_quantity) / float(z.capacity_limit) * 100, 1), 100)
+
+    is_warning = utilization >= ZONE_CAPACITY_WARNING_RATIO * 100
+
+    zone_data = {
+        'id': z.id,
+        'code': z.code,
+        'name': z.name,
+        'warehouse_id': z.warehouse.id,
+        'warehouse_name': z.warehouse.name,
+        'area': str(z.area),
+        'capacity_limit': str(z.capacity_limit),
+        'current_usage': str(total_quantity),
+        'utilization': utilization,
+        'is_warning': is_warning,
+        'manager': z.manager,
+        'phone': z.phone,
+        'status': z.get_status_display(),
+        'status_code': z.status,
+        'remark': z.remark,
+        'created_at': z.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'updated_at': z.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+    return JsonResponse({
+        'zone': zone_data,
+        'variety_items': variety_items,
+    })
+
+
+@login_required
+@transaction.atomic
+def api_zone_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    code = data.get('code', '').strip()
+    name = data.get('name', '').strip()
+    warehouse_id = data.get('warehouse_id')
+    area = data.get('area', 0)
+    capacity_limit = data.get('capacity_limit', 0)
+    manager = data.get('manager', '').strip()
+    phone = data.get('phone', '').strip()
+    status = data.get('status', WarehouseZone.STATUS_NORMAL)
+    remark = data.get('remark', '').strip()
+
+    if not code or not name or not warehouse_id:
+        return JsonResponse({'success': False, 'message': '分区编码、名称和所属库房不能为空'})
+
+    if WarehouseZone.objects.filter(code=code).exists():
+        return JsonResponse({'success': False, 'message': '分区编码已存在'})
+
+    try:
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+    except Warehouse.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '所属库房不存在'})
+
+    try:
+        area = Decimal(str(area))
+        capacity_limit = Decimal(str(capacity_limit))
+    except Exception:
+        return JsonResponse({'success': False, 'message': '面积或容量格式错误'})
+
+    zone = WarehouseZone.objects.create(
+        code=code,
+        name=name,
+        warehouse=warehouse,
+        area=area,
+        capacity_limit=capacity_limit,
+        manager=manager,
+        phone=phone,
+        status=status,
+        remark=remark,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '分区创建成功',
+        'data': {'id': zone.id, 'code': zone.code},
+    })
+
+
+@login_required
+@transaction.atomic
+def api_zone_update_status(request, zone_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        zone = WarehouseZone.objects.select_for_update().get(pk=zone_id)
+    except WarehouseZone.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '分区不存在'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    new_status = data.get('status', '').strip()
+    if new_status not in ('normal', 'maintenance', 'disabled'):
+        return JsonResponse({'success': False, 'message': '无效的运行状态'})
+
+    old_status_display = zone.get_status_display()
+    zone.status = new_status
+    zone.save(update_fields=['status', 'updated_at'])
+
+    return JsonResponse({
+        'success': True,
+        'message': f'分区状态已从【{old_status_display}】变更为【{zone.get_status_display()}】',
+        'data': {
+            'id': zone.id,
+            'status': zone.get_status_display(),
+            'status_code': zone.status,
+        },
+    })

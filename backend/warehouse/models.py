@@ -164,6 +164,44 @@ class Warehouse(models.Model):
         return self.name
 
 
+class WarehouseZone(models.Model):
+    STATUS_NORMAL = 'normal'
+    STATUS_MAINTENANCE = 'maintenance'
+    STATUS_DISABLED = 'disabled'
+
+    STATUS_CHOICES = [
+        (STATUS_NORMAL, '正常'),
+        (STATUS_MAINTENANCE, '维护中'),
+        (STATUS_DISABLED, '停用'),
+    ]
+
+    code = models.CharField('分区编码', max_length=30, unique=True)
+    name = models.CharField('分区名称', max_length=50)
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT,
+        verbose_name='所属库房', related_name='zones',
+    )
+    area = models.DecimalField('面积(㎡)', max_digits=10, decimal_places=2, default=0)
+    capacity_limit = models.DecimalField('容量上限', max_digits=12, decimal_places=2, default=0)
+    manager = models.CharField('负责人', max_length=30, blank=True, default='')
+    phone = models.CharField('联系电话', max_length=20, blank=True, default='')
+    status = models.CharField(
+        '运行状态', max_length=15,
+        choices=STATUS_CHOICES, default=STATUS_NORMAL,
+    )
+    remark = models.TextField('备注', blank=True, default='')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '库房分区'
+        verbose_name_plural = '库房分区'
+        ordering = ['warehouse', 'code']
+
+    def __str__(self):
+        return f'{self.warehouse.name}-{self.name}'
+
+
 class WarehouseStock(models.Model):
     warehouse = models.ForeignKey(
         Warehouse, on_delete=models.PROTECT,
