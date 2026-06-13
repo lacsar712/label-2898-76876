@@ -19,4 +19,10 @@ urlpatterns = [
     path('approval/', views.menu_page, {'page_name': 'approval'}, name='approval'),
     path('attendance-staff/', views.menu_page, {'page_name': 'attendance-staff'}, name='attendance-staff'),
     path('outbound-staff/', views.menu_page, {'page_name': 'outbound-staff'}, name='outbound-staff'),
+    path('outbound/', views.outbound_page, name='outbound'),
+    path('api/outbound/varieties/', views.api_outbound_varieties, name='api-outbound-varieties'),
+    path('api/outbound/variety-stock/<int:variety_id>/', views.api_outbound_variety_stock, name='api-outbound-variety-stock'),
+    path('api/outbound/create/', views.api_outbound_create, name='api-outbound-create'),
+    path('api/outbound/list/', views.api_outbound_list, name='api-outbound-list'),
+    path('api/outbound/export-csv/', views.api_outbound_export_csv, name='api-outbound-export-csv'),
 ]

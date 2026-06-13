@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/outbound.css">
+{% endblock %}
+
+{% block content %}
+<div class="outbound-container">
+
+    <div class="outbound-form-panel">
+        <div class="panel-title">
+            <i class="bi bi-box-arrow-up"></i> 出库登记
+        </div>
+        <form id="outbound-form" autocomplete="off">
+            {% csrf_token %}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">出库单号</label>
+                    <input type="text" id="outbound-no" class="input-tech" readonly placeholder="提交后自动生成">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">物资品种 <span class="required">*</span></label>
+                    <select id="variety-select" class="input-tech" required>
+                        <option value="">-- 请选择品种 --</option>
+                    </select>
+                </div>
+                <div class="form-group stock-info-group">
+                    <label class="form-label">库存信息</label>
+                    <div id="stock-info" class="stock-info-display">选择品种后显示</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">出库数量 <span class="required">*</span></label>
+                    <input type="number" id="quantity" class="input-tech" min="0.01" step="0.01" required>
+                    <span id="quantity-unit" class="unit-hint"></span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">领用连队 <span class="required">*</span></label>
+                    <input type="text" id="receiving-unit" class="input-tech" placeholder="请输入领用连队" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">领用人 <span class="required">*</span></label>
+                    <input type="text" id="receiver" class="input-tech" placeholder="请输入领用人姓名" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">出库日期 <span class="required">*</span></label>
+                    <input type="date" id="outbound-date" class="input-tech" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">经办出库员</label>
+                    <input type="text" id="operator" class="input-tech" placeholder="请输入经办人姓名">
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label">领用用途</label>
+                    <input type="text" id="purpose" class="input-tech" placeholder="请输入领用用途">
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label">备注</label>
+                    <textarea id="remark" class="input-tech textarea-tech" rows="2" placeholder="请输入备注信息"></textarea>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="reset" class="btn-tech btn-cancel">重置</button>
+                <button type="submit" class="btn-tech">确认出库</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="outbound-list-panel">
+        <div class="panel-title">
+            <i class="bi bi-list-ul"></i> 出库记录
+        </div>
+
+        <div class="filter-bar">
+            <div class="filter-item">
+                <label>起始日期</label>
+                <input type="date" id="filter-date-from" class="input-tech filter-input">
+            </div>
+            <div class="filter-item">
+                <label>截止日期</label>
+                <input type="date" id="filter-date-to" class="input-tech filter-input">
+            </div>
+            <div class="filter-item">
+                <label>领用连队</label>
+                <input type="text" id="filter-unit" class="input-tech filter-input" placeholder="连队名称">
+            </div>
+            <div class="filter-actions">
+                <button id="btn-filter" class="btn-tech btn-sm">查询</button>
+                <button id="btn-reset-filter" class="btn-tech btn-sm btn-cancel">重置</button>
+                <button id="btn-export-csv" class="btn-tech btn-sm btn-export">
+                    <i class="bi bi-download"></i> 导出CSV
+                </button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="outbound-table">
+                <thead>
+                    <tr>
+                        <th>出库单号</th>
+                        <th>物资品种</th>
+                        <th>品类</th>
+                        <th>出库数量</th>
+                        <th>领用连队</th>
+                        <th>领用人</th>
+                        <th>出库日期</th>
+                        <th>经办出库员</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody id="outbound-tbody">
+                    <tr class="empty-row">
+                        <td colspan="9">暂无出库记录</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-bar">
+            <span id="pagination-info" class="pagination-info">共 0 条</span>
+            <div class="pagination-controls">
+                <button id="btn-prev-page" class="btn-tech btn-sm btn-cancel" disabled>上一页</button>
+                <span id="pagination-pages" class="pagination-pages"></span>
+                <button id="btn-next-page" class="btn-tech btn-sm btn-cancel" disabled>下一页</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/outbound.js"></script>
+{% endblock %}

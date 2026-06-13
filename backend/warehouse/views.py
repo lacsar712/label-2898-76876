@@ -1,11 +1,17 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.db import transaction
+from django.db.models import Q
 import json
+import csv
 from datetime import timedelta, datetime
 import random
+from decimal import Decimal
+
+from .models import GoodsVariety, GoodsOutbound, generate_outbound_no
 
 
 def user_login(request):
@@ -97,7 +103,7 @@ def api_dashboard_activities(request):
         operator = random.choice(operators)
         quantity = random.randint(5, 50)
         ts = now - timedelta(minutes=random.randint(5, 300))
-        link = '/goods-entry/' if op_type == '入库' else '/query-export/'
+        link = '/goods-entry/' if op_type == '入库' else '/outbound/'
         activities.append({
             'type': op_type,
             'item': item_name,
@@ -127,3 +133,210 @@ def menu_page(request, page_name):
     }
     title = titles.get(page_name, '页面')
     return render(request, 'pages/dev.html', {'title': title, 'page_name': page_name})
+
+
+@login_required
+def outbound_page(request):
+    return render(request, 'pages/outbound.html', {
+        'title': '出库登记',
+        'page_name': 'outbound',
+    })
+
+
+@login_required
+def api_outbound_varieties(request):
+    varieties = GoodsVariety.objects.select_related('category', 'unit').all()
+    data = []
+    for v in varieties:
+        data.append({
+            'id': v.id,
+            'name': v.name,
+            'category': v.category.name,
+            'unit': v.unit.name,
+            'stock_quantity': str(v.stock_quantity),
+        })
+    return JsonResponse({'varieties': data})
+
+
+@login_required
+def api_outbound_variety_stock(request, variety_id):
+    try:
+        v = GoodsVariety.objects.select_related('unit').get(pk=variety_id)
+        return JsonResponse({
+            'id': v.id,
+            'name': v.name,
+            'stock_quantity': str(v.stock_quantity),
+            'unit': v.unit.name,
+        })
+    except GoodsVariety.DoesNotExist:
+        return JsonResponse({'error': '品种不存在'}, status=404)
+
+
+@login_required
+@transaction.atomic
+def api_outbound_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    variety_id = data.get('variety_id')
+    quantity = data.get('quantity')
+    receiving_unit = data.get('receiving_unit', '').strip()
+    receiver = data.get('receiver', '').strip()
+    outbound_date = data.get('outbound_date')
+    operator = data.get('operator', '').strip()
+    purpose = data.get('purpose', '').strip()
+    remark = data.get('remark', '').strip()
+
+    if not all([variety_id, quantity, receiving_unit, receiver, outbound_date]):
+        return JsonResponse({'success': False, 'message': '必填字段不能为空'})
+
+    try:
+        quantity = Decimal(str(quantity))
+        if quantity <= 0:
+            return JsonResponse({'success': False, 'message': '出库数量必须大于零'})
+    except Exception:
+        return JsonResponse({'success': False, 'message': '出库数量格式错误'})
+
+    try:
+        variety = GoodsVariety.objects.select_for_update().get(pk=variety_id)
+    except GoodsVariety.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '物资品种不存在'})
+
+    if quantity > variety.stock_quantity:
+        return JsonResponse({
+            'success': False,
+            'message': f'出库数量({quantity})超过可用库存({variety.stock_quantity}{variety.unit.name})',
+        })
+
+    try:
+        datetime.strptime(outbound_date, '%Y-%m-%d')
+    except ValueError:
+        return JsonResponse({'success': False, 'message': '出库日期格式错误'})
+
+    outbound_no = generate_outbound_no()
+
+    record = GoodsOutbound.objects.create(
+        outbound_no=outbound_no,
+        variety=variety,
+        quantity=quantity,
+        receiving_unit=receiving_unit,
+        receiver=receiver,
+        outbound_date=outbound_date,
+        operator=operator,
+        purpose=purpose,
+        remark=remark,
+        status='completed',
+    )
+
+    variety.stock_quantity -= quantity
+    variety.save(update_fields=['stock_quantity'])
+
+    return JsonResponse({
+        'success': True,
+        'message': '出库登记成功',
+        'data': {
+            'outbound_no': record.outbound_no,
+            'variety_name': variety.name,
+            'quantity': str(record.quantity),
+            'remaining_stock': str(variety.stock_quantity),
+        },
+    })
+
+
+@login_required
+def api_outbound_list(request):
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    receiving_unit = request.GET.get('receiving_unit', '')
+
+    qs = GoodsOutbound.objects.select_related('variety', 'variety__category', 'variety__unit').all()
+
+    if date_from:
+        qs = qs.filter(outbound_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(outbound_date__lte=date_to)
+    if receiving_unit:
+        qs = qs.filter(receiving_unit__icontains=receiving_unit)
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    records = qs[start:end]
+
+    items = []
+    for r in records:
+        items.append({
+            'id': r.id,
+            'outbound_no': r.outbound_no,
+            'variety_name': r.variety.name,
+            'category': r.variety.category.name,
+            'unit': r.variety.unit.name,
+            'quantity': str(r.quantity),
+            'receiving_unit': r.receiving_unit,
+            'receiver': r.receiver,
+            'outbound_date': r.outbound_date.strftime('%Y-%m-%d'),
+            'operator': r.operator,
+            'purpose': r.purpose,
+            'remark': r.remark,
+            'status': r.get_status_display(),
+        })
+
+    return JsonResponse({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size if total > 0 else 0,
+    })
+
+
+@login_required
+def api_outbound_export_csv(request):
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    receiving_unit = request.GET.get('receiving_unit', '')
+
+    qs = GoodsOutbound.objects.select_related('variety', 'variety__category', 'variety__unit').all()
+
+    if date_from:
+        qs = qs.filter(outbound_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(outbound_date__lte=date_to)
+    if receiving_unit:
+        qs = qs.filter(receiving_unit__icontains=receiving_unit)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="outbound_records.csv"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow([
+        '出库单号', '物资品种', '品类', '计量单位', '出库数量',
+        '领用连队', '领用人', '出库日期', '经办出库员',
+        '领用用途', '备注', '单据状态',
+    ])
+
+    for r in qs:
+        writer.writerow([
+            r.outbound_no,
+            r.variety.name,
+            r.variety.category.name,
+            r.variety.unit.name,
+            str(r.quantity),
+            r.receiving_unit,
+            r.receiver,
+            r.outbound_date.strftime('%Y-%m-%d'),
+            r.operator,
+            r.purpose,
+            r.remark,
+            r.get_status_display(),
+        ])
+
+    return response
