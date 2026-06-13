@@ -11,7 +11,10 @@ from datetime import timedelta, datetime
 import random
 from decimal import Decimal
 
-from .models import GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no
+from .models import (
+    GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
+    Warehouse, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
+)
 from django.db.models import Max, Sum
 
 
@@ -478,4 +481,499 @@ def api_inventory_flow(request, variety_id):
             'stock_quantity': str(variety.stock_quantity),
         },
         'flows': all_flows,
+    })
+
+
+@login_required
+def transfer_page(request):
+    return render(request, 'pages/transfer.html', {
+        'title': '调拨管理',
+        'page_name': 'transfer',
+    })
+
+
+@login_required
+def api_transfer_warehouses(request):
+    warehouses = Warehouse.objects.all()
+    data = []
+    for w in warehouses:
+        data.append({
+            'id': w.id,
+            'name': w.name,
+            'code': w.code,
+        })
+    return JsonResponse({'warehouses': data})
+
+
+@login_required
+def api_transfer_warehouse_stock(request, warehouse_id):
+    variety_id = request.GET.get('variety_id', '')
+    try:
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+    except Warehouse.DoesNotExist:
+        return JsonResponse({'error': '库区不存在'}, status=404)
+
+    if variety_id:
+        try:
+            stock = WarehouseStock.objects.get(
+                warehouse=warehouse,
+                variety_id=variety_id,
+            )
+            variety = stock.variety
+            return JsonResponse({
+                'warehouse_id': warehouse.id,
+                'warehouse_name': warehouse.name,
+                'variety_id': variety.id,
+                'variety_name': variety.name,
+                'stock_quantity': str(stock.stock_quantity),
+                'unit': variety.unit.name,
+            })
+        except WarehouseStock.DoesNotExist:
+            return JsonResponse({
+                'warehouse_id': warehouse.id,
+                'warehouse_name': warehouse.name,
+                'variety_id': int(variety_id) if variety_id.isdigit() else None,
+                'variety_name': '',
+                'stock_quantity': '0',
+                'unit': '',
+            })
+
+    stocks = WarehouseStock.objects.filter(
+        warehouse=warehouse,
+    ).select_related('variety', 'variety__unit')
+    data = []
+    for s in stocks:
+        data.append({
+            'variety_id': s.variety.id,
+            'variety_name': s.variety.name,
+            'stock_quantity': str(s.stock_quantity),
+            'unit': s.variety.unit.name,
+        })
+    return JsonResponse({'stocks': data, 'warehouse_name': warehouse.name})
+
+
+@login_required
+def api_transfer_varieties(request):
+    source_warehouse_id = request.GET.get('warehouse_id', '')
+    if not source_warehouse_id:
+        varieties = GoodsVariety.objects.select_related('category', 'unit').all()
+        data = []
+        for v in varieties:
+            data.append({
+                'id': v.id,
+                'name': v.name,
+                'category': v.category.name,
+                'unit': v.unit.name,
+            })
+        return JsonResponse({'varieties': data})
+
+    try:
+        warehouse = Warehouse.objects.get(pk=source_warehouse_id)
+    except Warehouse.DoesNotExist:
+        return JsonResponse({'error': '库区不存在'}, status=404)
+
+    stocks = WarehouseStock.objects.filter(
+        warehouse=warehouse,
+        stock_quantity__gt=0,
+    ).select_related('variety', 'variety__category', 'variety__unit')
+
+    data = []
+    for s in stocks:
+        data.append({
+            'id': s.variety.id,
+            'name': s.variety.name,
+            'category': s.variety.category.name,
+            'unit': s.variety.unit.name,
+            'stock_quantity': str(s.stock_quantity),
+        })
+    return JsonResponse({'varieties': data})
+
+
+@login_required
+@transaction.atomic
+def api_transfer_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    source_warehouse_id = data.get('source_warehouse_id')
+    target_warehouse_id = data.get('target_warehouse_id')
+    variety_id = data.get('variety_id')
+    quantity = data.get('quantity')
+    applicant = data.get('applicant', '').strip()
+    remark = data.get('remark', '').strip()
+
+    if not all([source_warehouse_id, target_warehouse_id, variety_id, quantity, applicant]):
+        return JsonResponse({'success': False, 'message': '必填字段不能为空'})
+
+    if source_warehouse_id == target_warehouse_id:
+        return JsonResponse({'success': False, 'message': '源库区和目标库区不能相同'})
+
+    try:
+        quantity = Decimal(str(quantity))
+        if quantity <= 0:
+            return JsonResponse({'success': False, 'message': '调拨数量必须大于零'})
+    except Exception:
+        return JsonResponse({'success': False, 'message': '调拨数量格式错误'})
+
+    try:
+        source_warehouse = Warehouse.objects.get(pk=source_warehouse_id)
+    except Warehouse.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '源库区不存在'})
+
+    try:
+        target_warehouse = Warehouse.objects.get(pk=target_warehouse_id)
+    except Warehouse.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '目标库区不存在'})
+
+    try:
+        variety = GoodsVariety.objects.get(pk=variety_id)
+    except GoodsVariety.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '物资品种不存在'})
+
+    try:
+        source_stock = WarehouseStock.objects.select_for_update().get(
+            warehouse=source_warehouse,
+            variety=variety,
+        )
+    except WarehouseStock.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': f'源库区{source_warehouse.name}中无{variety.name}库存',
+        })
+
+    if quantity > source_stock.stock_quantity:
+        return JsonResponse({
+            'success': False,
+            'message': f'调拨数量({quantity}{variety.unit.name})超过源库区可用库存({source_stock.stock_quantity}{variety.unit.name})',
+        })
+
+    transfer_no = generate_transfer_no()
+
+    order = TransferOrder.objects.create(
+        transfer_no=transfer_no,
+        source_warehouse=source_warehouse,
+        target_warehouse=target_warehouse,
+        variety=variety,
+        quantity=quantity,
+        applicant=applicant,
+        status=TransferOrder.STATUS_PENDING,
+        remark=remark,
+    )
+
+    TransferOrderLog.objects.create(
+        transfer_order=order,
+        action=TransferOrderLog.ACTION_CREATE,
+        operator=applicant,
+        remark='创建调拨申请',
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '调拨申请提交成功',
+        'data': {
+            'transfer_no': order.transfer_no,
+            'status': order.get_status_display(),
+        },
+    })
+
+
+@login_required
+def api_transfer_list(request):
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 10))
+    status = request.GET.get('status', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    keyword = request.GET.get('keyword', '').strip()
+
+    qs = TransferOrder.objects.select_related(
+        'source_warehouse', 'target_warehouse',
+        'variety', 'variety__category', 'variety__unit',
+    ).all()
+
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+
+    if date_from:
+        try:
+            qs = qs.filter(apply_time__date__gte=date_from)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            qs = qs.filter(apply_time__date__lte=date_to)
+        except ValueError:
+            pass
+
+    if keyword:
+        qs = qs.filter(
+            Q(transfer_no__icontains=keyword) |
+            Q(applicant__icontains=keyword) |
+            Q(variety__name__icontains=keyword)
+        )
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    orders = qs[start:end]
+
+    items = []
+    for o in orders:
+        items.append({
+            'id': o.id,
+            'transfer_no': o.transfer_no,
+            'source_warehouse': o.source_warehouse.name,
+            'target_warehouse': o.target_warehouse.name,
+            'variety_name': o.variety.name,
+            'category': o.variety.category.name,
+            'unit': o.variety.unit.name,
+            'quantity': str(o.quantity),
+            'applicant': o.applicant,
+            'status': o.get_status_display(),
+            'status_code': o.status,
+            'apply_time': o.apply_time.strftime('%Y-%m-%d %H:%M'),
+            'execute_time': o.execute_time.strftime('%Y-%m-%d %H:%M') if o.execute_time else '',
+        })
+
+    return JsonResponse({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size if total > 0 else 0,
+    })
+
+
+@login_required
+def api_transfer_detail(request, order_id):
+    try:
+        order = TransferOrder.objects.select_related(
+            'source_warehouse', 'target_warehouse',
+            'variety', 'variety__category', 'variety__unit',
+        ).get(pk=order_id)
+    except TransferOrder.DoesNotExist:
+        return JsonResponse({'error': '调拨单不存在'}, status=404)
+
+    try:
+        source_stock = WarehouseStock.objects.get(
+            warehouse=order.source_warehouse,
+            variety=order.variety,
+        )
+        source_stock_qty = str(source_stock.stock_quantity)
+    except WarehouseStock.DoesNotExist:
+        source_stock_qty = '0'
+
+    try:
+        target_stock = WarehouseStock.objects.get(
+            warehouse=order.target_warehouse,
+            variety=order.variety,
+        )
+        target_stock_qty = str(target_stock.stock_quantity)
+    except WarehouseStock.DoesNotExist:
+        target_stock_qty = '0'
+
+    logs = []
+    for log in order.logs.all().order_by('created_at'):
+        logs.append({
+            'id': log.id,
+            'action': log.get_action_display(),
+            'action_code': log.action,
+            'operator': log.operator,
+            'remark': log.remark,
+            'time': log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        })
+
+    order_data = {
+        'id': order.id,
+        'transfer_no': order.transfer_no,
+        'source_warehouse_id': order.source_warehouse.id,
+        'source_warehouse': order.source_warehouse.name,
+        'target_warehouse_id': order.target_warehouse.id,
+        'target_warehouse': order.target_warehouse.name,
+        'variety_id': order.variety.id,
+        'variety_name': order.variety.name,
+        'category': order.variety.category.name,
+        'unit': order.variety.unit.name,
+        'quantity': str(order.quantity),
+        'applicant': order.applicant,
+        'status': order.get_status_display(),
+        'status_code': order.status,
+        'apply_time': order.apply_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'execute_time': order.execute_time.strftime('%Y-%m-%d %H:%M:%S') if order.execute_time else '',
+        'approver': order.approver,
+        'approval_remark': order.approval_remark,
+        'approval_time': order.approval_time.strftime('%Y-%m-%d %H:%M:%S') if order.approval_time else '',
+        'executor': order.executor,
+        'remark': order.remark,
+        'source_stock': source_stock_qty,
+        'target_stock': target_stock_qty,
+    }
+
+    return JsonResponse({
+        'order': order_data,
+        'logs': logs,
+    })
+
+
+@login_required
+@transaction.atomic
+def api_transfer_approve(request, order_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    action = data.get('action')
+    approver = data.get('approver', '').strip()
+    remark = data.get('remark', '').strip()
+
+    if action not in ('approve', 'reject'):
+        return JsonResponse({'success': False, 'message': '无效的审批操作'})
+
+    if not approver:
+        return JsonResponse({'success': False, 'message': '审批人不能为空'})
+
+    try:
+        order = TransferOrder.objects.select_for_update().get(pk=order_id)
+    except TransferOrder.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '调拨单不存在'}, status=404)
+
+    if order.status != TransferOrder.STATUS_PENDING:
+        return JsonResponse({'success': False, 'message': '只有待审批状态的调拨单才能审批'})
+
+    if action == 'approve':
+        try:
+            source_stock = WarehouseStock.objects.select_for_update().get(
+                warehouse=order.source_warehouse,
+                variety=order.variety,
+            )
+        except WarehouseStock.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': f'源库区{order.source_warehouse.name}中无{order.variety.name}库存',
+            })
+
+        if order.quantity > source_stock.stock_quantity:
+            return JsonResponse({
+                'success': False,
+                'message': f'调拨数量({order.quantity}{order.variety.unit.name})超过源库区可用库存({source_stock.stock_quantity}{order.variety.unit.name})',
+            })
+
+        order.status = TransferOrder.STATUS_APPROVED
+        log_action = TransferOrderLog.ACTION_APPROVE
+        msg = '审批通过'
+    else:
+        order.status = TransferOrder.STATUS_REJECTED
+        log_action = TransferOrderLog.ACTION_REJECT
+        msg = '审批驳回'
+
+    order.approver = approver
+    order.approval_remark = remark
+    order.approval_time = timezone.now()
+    order.save()
+
+    TransferOrderLog.objects.create(
+        transfer_order=order,
+        action=log_action,
+        operator=approver,
+        remark=remark or msg,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': msg + '成功',
+        'data': {
+            'transfer_no': order.transfer_no,
+            'status': order.get_status_display(),
+        },
+    })
+
+
+@login_required
+@transaction.atomic
+def api_transfer_execute(request, order_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    executor = data.get('executor', '').strip()
+
+    if not executor:
+        return JsonResponse({'success': False, 'message': '执行人不能为空'})
+
+    try:
+        order = TransferOrder.objects.select_for_update().get(pk=order_id)
+    except TransferOrder.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '调拨单不存在'}, status=404)
+
+    if order.status != TransferOrder.STATUS_APPROVED:
+        return JsonResponse({'success': False, 'message': '只有已通过状态的调拨单才能执行'})
+
+    try:
+        source_stock = WarehouseStock.objects.select_for_update().get(
+            warehouse=order.source_warehouse,
+            variety=order.variety,
+        )
+    except WarehouseStock.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': f'源库区{order.source_warehouse.name}中无{order.variety.name}库存',
+        })
+
+    if order.quantity > source_stock.stock_quantity:
+        return JsonResponse({
+            'success': False,
+            'message': f'调拨数量({order.quantity}{order.variety.unit.name})超过源库区可用库存({source_stock.stock_quantity}{order.variety.unit.name})',
+        })
+
+    source_stock.stock_quantity -= order.quantity
+    source_stock.save()
+
+    try:
+        target_stock = WarehouseStock.objects.select_for_update().get(
+            warehouse=order.target_warehouse,
+            variety=order.variety,
+        )
+        target_stock.stock_quantity += order.quantity
+        target_stock.save()
+    except WarehouseStock.DoesNotExist:
+        WarehouseStock.objects.create(
+            warehouse=order.target_warehouse,
+            variety=order.variety,
+            stock_quantity=order.quantity,
+        )
+
+    order.status = TransferOrder.STATUS_EXECUTED
+    order.executor = executor
+    order.execute_time = timezone.now()
+    order.save()
+
+    TransferOrderLog.objects.create(
+        transfer_order=order,
+        action=TransferOrderLog.ACTION_EXECUTE,
+        operator=executor,
+        remark='执行调拨完成',
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '调拨执行成功',
+        'data': {
+            'transfer_no': order.transfer_no,
+            'status': order.get_status_display(),
+            'execute_time': order.execute_time.strftime('%Y-%m-%d %H:%M:%S'),
+        },
     })

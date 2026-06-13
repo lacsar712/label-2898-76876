@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/transfer.css">
+{% endblock %}
+
+{% block content %}
+<div class="transfer-container">
+
+    <div class="transfer-form-panel">
+        <div class="panel-title">
+            <i class="bi bi-arrow-left-right"></i> 调拨申请
+        </div>
+        <form id="transfer-form" autocomplete="off">
+            {% csrf_token %}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">调拨单号</label>
+                    <input type="text" id="transfer-no" class="input-tech" readonly placeholder="提交后自动生成">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">申请人 <span class="required">*</span></label>
+                    <input type="text" id="applicant" class="input-tech" placeholder="请输入申请人姓名" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">申请时间</label>
+                    <input type="text" id="apply-time" class="input-tech" readonly placeholder="提交后自动生成">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">源库区 <span class="required">*</span></label>
+                    <select id="source-warehouse" class="input-tech" required>
+                        <option value="">-- 请选择源库区 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">目标库区 <span class="required">*</span></label>
+                    <select id="target-warehouse" class="input-tech" required>
+                        <option value="">-- 请选择目标库区 --</option>
+                    </select>
+                </div>
+                <div class="form-group stock-info-group">
+                    <label class="form-label">源库区库存</label>
+                    <div id="source-stock-info" class="stock-info-display">请先选择源库区和品种</div>
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label">物资品种 <span class="required">*</span></label>
+                    <select id="variety-select" class="input-tech" required>
+                        <option value="">-- 请先选择源库区 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">调拨数量 <span class="required">*</span></label>
+                    <input type="number" id="quantity" class="input-tech" min="0.01" step="0.01" required>
+                    <span id="quantity-unit" class="unit-hint"></span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">计量单位</label>
+                    <input type="text" id="unit-display" class="input-tech" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">调拨状态</label>
+                    <input type="text" class="input-tech" readonly value="待审批">
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label">备注</label>
+                    <textarea id="remark" class="input-tech textarea-tech" rows="2" placeholder="请输入备注信息"></textarea>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="reset" class="btn-tech btn-cancel">重置</button>
+                <button type="submit" class="btn-tech">提交申请</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="transfer-list-panel">
+        <div class="panel-title">
+            <i class="bi bi-list-ul"></i> 调拨记录
+            <div class="panel-actions">
+                <span class="record-count-info" id="record-count">共 0 条记录</span>
+            </div>
+        </div>
+
+        <div class="status-tabs" id="status-tabs">
+            <span class="status-tab active" data-status="all">全部</span>
+            <span class="status-tab" data-status="pending">待审批</span>
+            <span class="status-tab" data-status="approved">已通过</span>
+            <span class="status-tab" data-status="rejected">已驳回</span>
+            <span class="status-tab" data-status="executed">已执行</span>
+        </div>
+
+        <div class="filter-bar">
+            <div class="filter-item">
+                <label>起始日期</label>
+                <input type="date" id="filter-date-from" class="input-tech filter-input">
+            </div>
+            <div class="filter-item">
+                <label>截止日期</label>
+                <input type="date" id="filter-date-to" class="input-tech filter-input">
+            </div>
+            <div class="filter-item">
+                <label>关键词</label>
+                <input type="text" id="filter-keyword" class="input-tech filter-input" placeholder="单号/品种/申请人">
+            </div>
+            <div class="filter-actions">
+                <button id="btn-filter" class="btn-tech btn-sm">查询</button>
+                <button id="btn-reset-filter" class="btn-tech btn-sm btn-cancel">重置</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="transfer-table">
+                <thead>
+                    <tr>
+                        <th>调拨单号</th>
+                        <th>源库区</th>
+                        <th>目标库区</th>
+                        <th>物资品种</th>
+                        <th>调拨数量</th>
+                        <th>申请人</th>
+                        <th>申请时间</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="transfer-tbody">
+                    <tr class="empty-row">
+                        <td colspan="9">暂无调拨记录</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-bar">
+            <span id="pagination-info" class="pagination-info">共 0 条</span>
+            <div class="pagination-controls">
+                <button id="btn-prev-page" class="btn-tech btn-sm btn-cancel" disabled>上一页</button>
+                <span id="pagination-pages" class="pagination-pages"></span>
+                <button id="btn-next-page" class="btn-tech btn-sm btn-cancel" disabled>下一页</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="detail-modal" class="detail-modal-overlay">
+    <div class="detail-modal">
+        <div class="detail-modal-header">
+            <h3><i class="bi bi-file-earmark-text"></i> 调拨单详情</h3>
+            <button class="detail-close-btn" id="detail-close-btn">&times;</button>
+        </div>
+        <div class="detail-modal-body">
+            <div class="detail-section">
+                <div class="detail-section-title">基本信息</div>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">调拨单号</span>
+                        <span class="detail-value" id="detail-transfer-no">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">状态</span>
+                        <span class="detail-value" id="detail-status">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">申请人</span>
+                        <span class="detail-value" id="detail-applicant">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">申请时间</span>
+                        <span class="detail-value" id="detail-apply-time">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">源库区</span>
+                        <span class="detail-value" id="detail-source">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">目标库区</span>
+                        <span class="detail-value" id="detail-target">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">物资品种</span>
+                        <span class="detail-value" id="detail-variety">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">调拨数量</span>
+                        <span class="detail-value" id="detail-quantity">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">源库库存</span>
+                        <span class="detail-value" id="detail-source-stock">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">目标库库存</span>
+                        <span class="detail-value" id="detail-target-stock">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">审批人</span>
+                        <span class="detail-value" id="detail-approver">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">审批时间</span>
+                        <span class="detail-value" id="detail-approval-time">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">执行人</span>
+                        <span class="detail-value" id="detail-executor">-</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">执行时间</span>
+                        <span class="detail-value" id="detail-execute-time">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-section-title">备注信息</div>
+                <div class="detail-remark" id="detail-remark">-</div>
+                <div class="detail-approval-remark" id="detail-approval-remark" style="display:none;">
+                    <strong>审批意见：</strong><span id="detail-approval-remark-text"></span>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="bi bi-clock-history"></i> 流转轨迹
+                </div>
+                <div class="timeline" id="detail-timeline">
+                </div>
+            </div>
+        </div>
+        <div class="detail-modal-footer" id="detail-modal-footer">
+        </div>
+    </div>
+</div>
+
+<div id="action-modal" class="action-modal-overlay">
+    <div class="action-modal">
+        <div class="action-modal-header">
+            <h3 id="action-modal-title">操作</h3>
+            <button class="action-close-btn" id="action-close-btn">&times;</button>
+        </div>
+        <div class="action-modal-body">
+            <div class="form-group">
+                <label class="form-label" id="action-operator-label">操作人 <span class="required">*</span></label>
+                <input type="text" id="action-operator" class="input-tech" placeholder="请输入操作人姓名">
+            </div>
+            <div class="form-group" id="action-remark-group">
+                <label class="form-label">备注</label>
+                <textarea id="action-remark" class="input-tech textarea-tech" rows="3" placeholder="请输入备注信息"></textarea>
+            </div>
+        </div>
+        <div class="action-modal-footer">
+            <button class="btn-tech btn-cancel" id="action-cancel-btn">取消</button>
+            <button class="btn-tech" id="action-confirm-btn">确认</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/transfer.js"></script>
+{% endblock %}

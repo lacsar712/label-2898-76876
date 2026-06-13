@@ -29,4 +29,13 @@ urlpatterns = [
     path('api/inventory/overview/', views.api_inventory_overview, name='api-inventory-overview'),
     path('api/inventory/list/', views.api_inventory_list, name='api-inventory-list'),
     path('api/inventory/flow/<int:variety_id>/', views.api_inventory_flow, name='api-inventory-flow'),
+    path('transfer/', views.transfer_page, name='transfer'),
+    path('api/transfer/warehouses/', views.api_transfer_warehouses, name='api-transfer-warehouses'),
+    path('api/transfer/warehouse-stock/<int:warehouse_id>/', views.api_transfer_warehouse_stock, name='api-transfer-warehouse-stock'),
+    path('api/transfer/varieties/', views.api_transfer_varieties, name='api-transfer-varieties'),
+    path('api/transfer/create/', views.api_transfer_create, name='api-transfer-create'),
+    path('api/transfer/list/', views.api_transfer_list, name='api-transfer-list'),
+    path('api/transfer/detail/<int:order_id>/', views.api_transfer_detail, name='api-transfer-detail'),
+    path('api/transfer/approve/<int:order_id>/', views.api_transfer_approve, name='api-transfer-approve'),
+    path('api/transfer/execute/<int:order_id>/', views.api_transfer_execute, name='api-transfer-execute'),
 ]
