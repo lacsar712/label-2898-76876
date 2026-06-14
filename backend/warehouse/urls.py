@@ -1,10 +1,12 @@
 from django.urls import path
 from . import views
+from . import auth_views
+from . import page_views
 
 urlpatterns = [
-    path('login/', views.user_login, name='login'),
-    path('logout/', views.user_logout, name='logout'),
-    path('', views.dashboard, name='dashboard'),
+    path('login/', auth_views.user_login, name='login'),
+    path('logout/', auth_views.user_logout, name='logout'),
+    path('', page_views.dashboard, name='dashboard'),
     path('api/dashboard/kpi/', views.api_dashboard_kpi, name='api-dashboard-kpi'),
     path('api/dashboard/trend/', views.api_dashboard_trend, name='api-dashboard-trend'),
     path('api/dashboard/category/', views.api_dashboard_category, name='api-dashboard-category'),
@@ -14,15 +16,15 @@ urlpatterns = [
     path('api/inbound/create/', views.api_inbound_create, name='api-inbound-create'),
     path('api/inbound/list/', views.api_inbound_list, name='api-inbound-list'),
     path('api/inbound/export-csv/', views.api_inbound_export_csv, name='api-inbound-export-csv'),
-    path('unit-management/', views.menu_page, {'page_name': 'unit-management'}, name='unit-management'),
-    path('category-management/', views.menu_page, {'page_name': 'category-management'}, name='category-management'),
-    path('variety-management/', views.menu_page, {'page_name': 'variety-management'}, name='variety-management'),
-    path('query-export/', views.menu_page, {'page_name': 'query-export'}, name='query-export'),
-    path('daily-report/', views.menu_page, {'page_name': 'daily-report'}, name='daily-report'),
-    path('warning/', views.menu_page, {'page_name': 'warning'}, name='warning'),
-    path('approval/', views.menu_page, {'page_name': 'approval'}, name='approval'),
-    path('attendance-staff/', views.menu_page, {'page_name': 'attendance-staff'}, name='attendance-staff'),
-    path('outbound-staff/', views.menu_page, {'page_name': 'outbound-staff'}, name='outbound-staff'),
+    path('unit-management/', page_views.menu_page, {'page_name': 'unit-management'}, name='unit-management'),
+    path('category-management/', page_views.menu_page, {'page_name': 'category-management'}, name='category-management'),
+    path('variety-management/', page_views.menu_page, {'page_name': 'variety-management'}, name='variety-management'),
+    path('query-export/', page_views.menu_page, {'page_name': 'query-export'}, name='query-export'),
+    path('daily-report/', page_views.menu_page, {'page_name': 'daily-report'}, name='daily-report'),
+    path('warning/', page_views.menu_page, {'page_name': 'warning'}, name='warning'),
+    path('approval/', page_views.menu_page, {'page_name': 'approval'}, name='approval'),
+    path('attendance-staff/', page_views.menu_page, {'page_name': 'attendance-staff'}, name='attendance-staff'),
+    path('outbound-staff/', page_views.menu_page, {'page_name': 'outbound-staff'}, name='outbound-staff'),
     path('outbound/', views.outbound_page, name='outbound'),
     path('api/outbound/varieties/', views.api_outbound_varieties, name='api-outbound-varieties'),
     path('api/outbound/variety-stock/<int:variety_id>/', views.api_outbound_variety_stock, name='api-outbound-variety-stock'),
