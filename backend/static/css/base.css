@@ -345,3 +345,19 @@ body {
     align-items: center;
     padding: 0 !important;
 }
+
+.menu-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: bold;
+    border-radius: 10px;
+    margin-left: auto;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.6);
+}

@@ -37,6 +37,10 @@
                 <h2>库房系统 v2.0</h2>
             </div>
             <nav>
+                <a href="/message/" class="menu-item {% if page_name == 'message' %}active{% endif %}">
+                    <i class="bi bi-bell-fill"></i> 消息中心
+                    <span class="menu-badge" id="sidebar-message-badge" style="display:none;">0</span>
+                </a>
                 <a href="/" class="menu-item {% if page_name == 'dashboard' %}active{% endif %}">
                     <i class="bi bi-speedometer2"></i> 仪表盘
                 </a>
@@ -137,6 +141,41 @@
     <!-- 脚本引入 -->
     <script src="/static/js/ui.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        function updateSidebarBadge(count) {
+            const badge = document.getElementById('sidebar-message-badge');
+            if (!badge) return;
+            if (count > 0) {
+                badge.style.display = 'inline-flex';
+                badge.textContent = count > 99 ? '99+' : count;
+            } else {
+                badge.style.display = 'none';
+                badge.textContent = '0';
+            }
+        }
+
+        function loadUnreadCount() {
+            if (!document.getElementById('sidebar-message-badge')) return;
+            fetch('/api/message/unread-count/', {
+                method: 'GET',
+                credentials: 'same-origin',
+            })
+                .then(response => response.json())
+                .then(data => {
+                    updateSidebarBadge(data.unread_count || 0);
+                })
+                .catch(() => {});
+        }
+
+        window.updateSidebarBadge = updateSidebarBadge;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUnreadCount();
+            setInterval(loadUnreadCount, 30000);
+        });
+    })();
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 

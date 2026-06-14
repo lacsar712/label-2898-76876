@@ -15,7 +15,7 @@ from decimal import Decimal
 from .models import (
     GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
     Warehouse, WarehouseZone, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
-    Supplier, SupplierRatingLog, OperationLog, OperationLogArchive,
+    Supplier, SupplierRatingLog, OperationLog, OperationLogArchive, Message,
 )
 from django.db.models import Max, Sum
 
@@ -272,6 +272,18 @@ def api_outbound_create(request):
             'receiver': receiver,
         },
     )
+
+    if float(variety.stock_quantity) <= STOCK_CRITICAL_THRESHOLD:
+        Message.send_message(
+            receiver=operator or request.user.username,
+            title=f'库存紧缺预警 - {variety.name}',
+            content=f'物资品种【{variety.name}】（品类：{variety.category.name}）当前库存仅为 {variety.stock_quantity}{variety.unit.name}，已低于警戒线（{STOCK_CRITICAL_THRESHOLD}{variety.unit.name}），请及时补充库存。',
+            message_type=Message.TYPE_WARNING,
+            sender='system',
+            biz_no=outbound_no,
+            biz_type='出库单',
+            biz_url=f'/inventory/',
+        )
 
     return JsonResponse({
         'success': True,
@@ -933,6 +945,29 @@ def api_transfer_approve(request, order_id):
         },
     )
 
+    if action == 'reject':
+        Message.send_message(
+            receiver=order.applicant,
+            title=f'调拨单审批驳回 - {order.transfer_no}',
+            content=f'您提交的调拨单 {order.transfer_no}（{order.variety.name} {order.quantity}{order.variety.unit.name}）已被驳回。\n审批人：{approver}\n驳回原因：{remark or "未填写"}',
+            message_type=Message.TYPE_APPROVAL,
+            sender=approver,
+            biz_no=order.transfer_no,
+            biz_type='调拨单',
+            biz_url=f'/transfer/',
+        )
+    else:
+        Message.send_message(
+            receiver=order.applicant,
+            title=f'调拨单审批通过 - {order.transfer_no}',
+            content=f'您提交的调拨单 {order.transfer_no}（{order.variety.name} {order.quantity}{order.variety.unit.name}）已审批通过，请等待执行。\n审批人：{approver}\n审批意见：{remark or "无"}',
+            message_type=Message.TYPE_APPROVAL,
+            sender=approver,
+            biz_no=order.transfer_no,
+            biz_type='调拨单',
+            biz_url=f'/transfer/',
+        )
+
     return JsonResponse({
         'success': True,
         'message': msg + '成功',
@@ -1025,6 +1060,33 @@ def api_transfer_execute(request, order_id):
             'source_warehouse': order.source_warehouse.name if order.source_warehouse else '',
             'target_warehouse': order.target_warehouse.name if order.target_warehouse else '',
         },
+    )
+
+    try:
+        variety = GoodsVariety.objects.get(pk=order.variety_id)
+        if float(variety.stock_quantity) <= STOCK_CRITICAL_THRESHOLD:
+            Message.send_message(
+                receiver=executor,
+                title=f'库存紧缺预警 - {variety.name}',
+                content=f'物资品种【{variety.name}】（品类：{variety.category.name}）当前总库存仅为 {variety.stock_quantity}{variety.unit.name}，已低于警戒线（{STOCK_CRITICAL_THRESHOLD}{variety.unit.name}），请及时补充库存。',
+                message_type=Message.TYPE_WARNING,
+                sender='system',
+                biz_no=order.transfer_no,
+                biz_type='调拨单',
+                biz_url=f'/inventory/',
+            )
+    except GoodsVariety.DoesNotExist:
+        pass
+
+    Message.send_message(
+        receiver=order.applicant,
+        title=f'调拨单已执行 - {order.transfer_no}',
+        content=f'您申请的调拨单 {order.transfer_no}（{order.variety.name} {order.quantity}{order.variety.unit.name}）已由 {executor} 执行完成。\n源库区：{order.source_warehouse.name}\n目标库区：{order.target_warehouse.name}',
+        message_type=Message.TYPE_APPROVAL,
+        sender=executor,
+        biz_no=order.transfer_no,
+        biz_type='调拨单',
+        biz_url=f'/transfer/',
     )
 
     return JsonResponse({
@@ -1993,4 +2055,189 @@ def api_operation_log_stats(request):
         'today_count': today_count,
         'action_stats': action_stats,
         'retention_days': getattr(settings, 'OPERATION_LOG_RETENTION_DAYS', 90),
+    })
+
+
+@login_required
+def message_page(request):
+    return render(request, 'pages/message.html', {
+        'title': '消息中心',
+        'page_name': 'message',
+    })
+
+
+@login_required
+def api_message_unread_count(request):
+    receiver = request.user.username
+    unread_count = Message.get_unread_count(receiver)
+    return JsonResponse({'unread_count': unread_count})
+
+
+@login_required
+def api_message_list(request):
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    message_type = request.GET.get('type', 'all')
+    keyword = request.GET.get('keyword', '').strip()
+    only_unread = request.GET.get('unread', 'false') == 'true'
+
+    receiver = request.user.username
+    qs = Message.objects.filter(receiver=receiver)
+
+    if only_unread:
+        qs = qs.filter(is_read=False)
+    if message_type and message_type != 'all':
+        qs = qs.filter(message_type=message_type)
+    if keyword:
+        qs = qs.filter(
+            Q(title__icontains=keyword) |
+            Q(content__icontains=keyword)
+        )
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    messages = qs[start:end]
+
+    items = []
+    for msg in messages:
+        items.append({
+            'id': msg.id,
+            'title': msg.title,
+            'content': msg.content[:100] + ('...' if len(msg.content) > 100 else ''),
+            'full_content': msg.content,
+            'message_type': msg.get_message_type_display(),
+            'message_type_code': msg.message_type,
+            'sender': msg.sender,
+            'is_read': msg.is_read,
+            'created_at': msg.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'biz_no': msg.biz_no,
+            'biz_type': msg.biz_type,
+            'biz_url': msg.biz_url,
+        })
+
+    unread_count = Message.get_unread_count(receiver)
+    type_counts = {
+        'all': total,
+        'unread': unread_count,
+        'system': Message.objects.filter(receiver=receiver, message_type=Message.TYPE_SYSTEM).count(),
+        'approval': Message.objects.filter(receiver=receiver, message_type=Message.TYPE_APPROVAL).count(),
+        'warning': Message.objects.filter(receiver=receiver, message_type=Message.TYPE_WARNING).count(),
+    }
+
+    return JsonResponse({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size if total > 0 else 0,
+        'unread_count': unread_count,
+        'type_counts': type_counts,
+    })
+
+
+@login_required
+def api_message_detail(request, message_id):
+    receiver = request.user.username
+    try:
+        msg = Message.objects.get(pk=message_id, receiver=receiver)
+    except Message.DoesNotExist:
+        return JsonResponse({'error': '消息不存在'}, status=404)
+
+    if not msg.is_read:
+        msg.is_read = True
+        msg.save(update_fields=['is_read'])
+
+    return JsonResponse({
+        'id': msg.id,
+        'title': msg.title,
+        'content': msg.content,
+        'message_type': msg.get_message_type_display(),
+        'message_type_code': msg.message_type,
+        'sender': msg.sender,
+        'is_read': msg.is_read,
+        'created_at': msg.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'biz_no': msg.biz_no,
+        'biz_type': msg.biz_type,
+        'biz_url': msg.biz_url,
+    })
+
+
+@login_required
+@transaction.atomic
+def api_message_mark_read(request, message_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    receiver = request.user.username
+    try:
+        msg = Message.objects.select_for_update().get(pk=message_id, receiver=receiver)
+    except Message.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '消息不存在'}, status=404)
+
+    msg.is_read = True
+    msg.save(update_fields=['is_read'])
+
+    return JsonResponse({
+        'success': True,
+        'message': '已标记为已读',
+        'unread_count': Message.get_unread_count(receiver),
+    })
+
+
+@login_required
+@transaction.atomic
+def api_message_batch_mark_read(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    message_ids = data.get('message_ids', [])
+    mark_all = data.get('mark_all', False)
+    receiver = request.user.username
+
+    qs = Message.objects.select_for_update().filter(receiver=receiver, is_read=False)
+    if not mark_all and message_ids:
+        qs = qs.filter(id__in=message_ids)
+
+    updated_count = qs.update(is_read=True)
+
+    return JsonResponse({
+        'success': True,
+        'message': f'已将 {updated_count} 条消息标记为已读',
+        'updated_count': updated_count,
+        'unread_count': Message.get_unread_count(receiver),
+    })
+
+
+@login_required
+@transaction.atomic
+def api_message_delete(request, message_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    receiver = request.user.username
+    try:
+        msg = Message.objects.select_for_update().get(pk=message_id, receiver=receiver)
+    except Message.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '消息不存在'}, status=404)
+
+    msg_title = msg.title
+    msg.delete()
+
+    log_operation(
+        request,
+        OperationLog.ACTION_DELETE,
+        f'消息-{msg_title}',
+        {'message_id': message_id, 'title': msg_title},
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '消息已删除',
+        'unread_count': Message.get_unread_count(receiver),
     })

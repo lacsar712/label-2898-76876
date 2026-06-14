@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import MeasureUnit, GoodsCategory, GoodsVariety, GoodsInbound, GoodsOutbound, WarehouseZone
+from .models import (
+    MeasureUnit, GoodsCategory, GoodsVariety, GoodsInbound, GoodsOutbound,
+    WarehouseZone, Message,
+)
 
 
 @admin.register(MeasureUnit)
@@ -40,3 +43,11 @@ class WarehouseZoneAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'warehouse', 'area', 'capacity_limit', 'manager', 'status')
     list_filter = ('warehouse', 'status')
     search_fields = ('code', 'name', 'manager')
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'message_type', 'sender', 'receiver', 'is_read', 'created_at', 'biz_no')
+    list_filter = ('message_type', 'is_read', 'created_at')
+    search_fields = ('title', 'content', 'receiver', 'sender', 'biz_no')
+    readonly_fields = ('created_at',)

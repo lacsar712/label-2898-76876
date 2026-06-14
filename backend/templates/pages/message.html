@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/message.css">
+{% endblock %}
+
+{% block content %}
+<div class="message-container">
+
+    <div class="message-main-panel">
+        <div class="message-sidebar">
+            <div class="sidebar-header">
+                <i class="bi bi-bell-fill"></i> 消息分类
+            </div>
+            <div class="category-tabs">
+                <div class="category-tab active" data-type="all">
+                    <i class="bi bi-inbox-fill"></i> 全部
+                    <span class="tab-count" id="count-all">0</span>
+                </div>
+                <div class="category-tab" data-type="unread">
+                    <i class="bi bi-envelope-fill"></i> 未读
+                    <span class="tab-count badge-warning" id="count-unread">0</span>
+                </div>
+                <div class="category-tab" data-type="system">
+                    <i class="bi bi-gear-wide-connected"></i> 系统
+                    <span class="tab-count" id="count-system">0</span>
+                </div>
+                <div class="category-tab" data-type="approval">
+                    <i class="bi bi-shield-check"></i> 审批
+                    <span class="tab-count" id="count-approval">0</span>
+                </div>
+                <div class="category-tab" data-type="warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 预警
+                    <span class="tab-count badge-danger" id="count-warning">0</span>
+                </div>
+            </div>
+            <div class="sidebar-actions">
+                <button id="btn-mark-all-read" class="btn-tech btn-sm btn-full">
+                    <i class="bi bi-check2-all"></i> 全部标为已读
+                </button>
+            </div>
+        </div>
+
+        <div class="message-content">
+            <div class="message-toolbar">
+                <div class="toolbar-left">
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" id="search-keyword" class="search-input" placeholder="搜索消息标题或内容...">
+                    </div>
+                    <button id="btn-search" class="btn-tech btn-sm">
+                        <i class="bi bi-search"></i> 搜索
+                    </button>
+                    <button id="btn-reset" class="btn-tech btn-sm btn-cancel">
+                        <i class="bi bi-arrow-counterclockwise"></i> 重置
+                    </button>
+                </div>
+                <div class="toolbar-right">
+                    <label class="checkbox-inline">
+                        <input type="checkbox" id="check-select-all">
+                        <span>全选</span>
+                    </label>
+                    <button id="btn-batch-mark-read" class="btn-tech btn-sm" disabled>
+                        <i class="bi bi-check2-circle"></i> 标为已读
+                    </button>
+                    <span class="message-stats" id="message-stats">共 0 条消息</span>
+                </div>
+            </div>
+
+            <div class="message-list-wrapper">
+                <div id="message-list" class="message-list">
+                    <div class="empty-state-card">
+                        <i class="bi bi-bell"></i>
+                        <p>正在加载消息...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pagination-bar" id="pagination-bar" style="display:none;">
+                <button id="btn-prev" class="btn-tech btn-sm">上一页</button>
+                <span id="page-info" class="page-info">第 1 / 1 页</span>
+                <button id="btn-next" class="btn-tech btn-sm">下一页</button>
+            </div>
+        </div>
+
+        <div class="message-detail-panel" id="message-detail-panel">
+            <div class="detail-empty" id="detail-empty">
+                <i class="bi bi-envelope-open"></i>
+                <p>请选择一条消息查看详情</p>
+            </div>
+            <div class="detail-content" id="detail-content" style="display:none;">
+                <div class="detail-header">
+                    <div class="detail-title-row">
+                        <h3 id="detail-title"></h3>
+                        <span class="detail-type-badge" id="detail-type"></span>
+                    </div>
+                    <div class="detail-meta">
+                        <span><i class="bi bi-person"></i> 发送人: <span id="detail-sender"></span></span>
+                        <span><i class="bi bi-clock"></i> <span id="detail-time"></span></span>
+                        <span class="detail-read-status" id="detail-read-status"></span>
+                    </div>
+                </div>
+                <div class="detail-body" id="detail-body"></div>
+                <div class="detail-footer">
+                    <div class="detail-biz-info" id="detail-biz-info" style="display:none;">
+                        <i class="bi bi-link-45deg"></i>
+                        关联业务: <span id="detail-biz-text"></span>
+                        <button id="btn-goto-biz" class="btn-tech btn-sm">
+                            <i class="bi bi-arrow-up-right-square"></i> 跳转到业务页面
+                        </button>
+                    </div>
+                    <div class="detail-actions">
+                        <button id="btn-mark-read" class="btn-tech btn-sm">
+                            <i class="bi bi-check2-circle"></i> 标为已读
+                        </button>
+                        <button id="btn-delete" class="btn-tech btn-sm btn-cancel">
+                            <i class="bi bi-trash"></i> 删除消息
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/message.js"></script>
+{% endblock %}

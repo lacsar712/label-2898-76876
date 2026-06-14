@@ -61,4 +61,11 @@ urlpatterns = [
     path('api/operation-log/detail/<int:log_id>/', views.api_operation_log_detail, name='api-operation-log-detail'),
     path('api/operation-log/archive/', views.api_operation_log_archive, name='api-operation-log-archive'),
     path('api/operation-log/stats/', views.api_operation_log_stats, name='api-operation-log-stats'),
+    path('message/', views.message_page, name='message'),
+    path('api/message/unread-count/', views.api_message_unread_count, name='api-message-unread-count'),
+    path('api/message/list/', views.api_message_list, name='api-message-list'),
+    path('api/message/detail/<int:message_id>/', views.api_message_detail, name='api-message-detail'),
+    path('api/message/mark-read/<int:message_id>/', views.api_message_mark_read, name='api-message-mark-read'),
+    path('api/message/batch-mark-read/', views.api_message_batch_mark_read, name='api-message-batch-mark-read'),
+    path('api/message/delete/<int:message_id>/', views.api_message_delete, name='api-message-delete'),
 ]

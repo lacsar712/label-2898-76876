@@ -483,3 +483,54 @@ class OperationLogArchive(models.Model):
     def __str__(self):
         return f'[归档][{self.get_action_type_display()}] {self.operator} - {self.target_object}'
 
+
+class Message(models.Model):
+    TYPE_SYSTEM = 'system'
+    TYPE_APPROVAL = 'approval'
+    TYPE_WARNING = 'warning'
+
+    TYPE_CHOICES = [
+        (TYPE_SYSTEM, '系统消息'),
+        (TYPE_APPROVAL, '审批消息'),
+        (TYPE_WARNING, '预警消息'),
+    ]
+
+    title = models.CharField('标题', max_length=200)
+    content = models.TextField('内容')
+    message_type = models.CharField(
+        '消息类型', max_length=20, choices=TYPE_CHOICES, db_index=True,
+    )
+    sender = models.CharField('发送人', max_length=100, blank=True, default='system')
+    receiver = models.CharField('接收人', max_length=100, db_index=True)
+    is_read = models.BooleanField('是否已读', default=False, db_index=True)
+    created_at = models.DateTimeField('创建时间', default=timezone.now, db_index=True)
+    biz_no = models.CharField('关联业务单号', max_length=100, blank=True, default='', db_index=True)
+    biz_type = models.CharField('关联业务类型', max_length=50, blank=True, default='')
+    biz_url = models.CharField('关联业务页面URL', max_length=500, blank=True, default='')
+
+    class Meta:
+        verbose_name = '消息'
+        verbose_name_plural = '消息'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'[{self.get_message_type_display()}] {self.title}'
+
+    @classmethod
+    def send_message(cls, receiver, title, content, message_type=TYPE_SYSTEM,
+                     sender='system', biz_no='', biz_type='', biz_url=''):
+        return cls.objects.create(
+            receiver=receiver,
+            title=title,
+            content=content,
+            message_type=message_type,
+            sender=sender,
+            biz_no=biz_no,
+            biz_type=biz_type,
+            biz_url=biz_url,
+        )
+
+    @classmethod
+    def get_unread_count(cls, receiver):
+        return cls.objects.filter(receiver=receiver, is_read=False).count()
+
