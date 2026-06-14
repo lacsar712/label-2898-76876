@@ -68,4 +68,6 @@ urlpatterns = [
     path('api/message/mark-read/<int:message_id>/', views.api_message_mark_read, name='api-message-mark-read'),
     path('api/message/batch-mark-read/', views.api_message_batch_mark_read, name='api-message-batch-mark-read'),
     path('api/message/delete/<int:message_id>/', views.api_message_delete, name='api-message-delete'),
+    path('data-screen/', views.data_screen_page, name='data-screen'),
+    path('api/data-screen/overview/', views.api_data_screen_overview, name='api-data-screen-overview'),
 ]

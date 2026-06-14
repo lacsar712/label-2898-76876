@@ -2241,3 +2241,125 @@ def api_message_delete(request, message_id):
         'message': '消息已删除',
         'unread_count': Message.get_unread_count(receiver),
     })
+
+
+@login_required
+def data_screen_page(request):
+    return render(request, 'data_screen.html', {
+        'title': '数据大屏',
+        'page_name': 'data-screen',
+    })
+
+
+@login_required
+def api_data_screen_overview(request):
+    today = timezone.now().date()
+    today_start = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+    week_start = timezone.make_aware(datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time()))
+    month_start = timezone.make_aware(datetime.combine(today.replace(day=1), datetime.min.time()))
+
+    def get_inbound_quantity(start, end):
+        return GoodsInbound.objects.filter(
+            status='completed',
+            inbound_date__gte=start.date(),
+            inbound_date__lte=end.date(),
+        ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+
+    def get_outbound_quantity(start, end):
+        return GoodsOutbound.objects.filter(
+            status='completed',
+            outbound_date__gte=start.date(),
+            outbound_date__lte=end.date(),
+        ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+
+    def get_inbound_count(start, end):
+        return GoodsInbound.objects.filter(
+            status='completed',
+            inbound_date__gte=start.date(),
+            inbound_date__lte=end.date(),
+        ).count()
+
+    def get_outbound_count(start, end):
+        return GoodsOutbound.objects.filter(
+            status='completed',
+            outbound_date__gte=start.date(),
+            outbound_date__lte=end.date(),
+        ).count()
+
+    today_end = today_start + timedelta(days=1) - timedelta(microseconds=1)
+    week_end = week_start + timedelta(days=7) - timedelta(microseconds=1)
+    month_end = month_start + timedelta(days=32)
+    month_end_date = (month_end.replace(day=1) - timedelta(days=1)).date()
+    month_end = timezone.make_aware(datetime.combine(month_end_date, datetime.max.time()))
+
+    today_in_qty = get_inbound_quantity(today_start, today_end)
+    today_out_qty = get_outbound_quantity(today_start, today_end)
+    week_in_qty = get_inbound_quantity(week_start, week_end)
+    week_out_qty = get_outbound_quantity(week_start, week_end)
+    month_in_qty = get_inbound_quantity(month_start, month_end)
+    month_out_qty = get_outbound_quantity(month_start, month_end)
+
+    today_in_count = get_inbound_count(today_start, today_end)
+    today_out_count = get_outbound_count(today_start, today_end)
+
+    total_stock = GoodsVariety.objects.aggregate(total=Sum('stock_quantity'))['total'] or Decimal('0')
+
+    thirty_days_ago = today - timedelta(days=30)
+    outbound_30d = GoodsOutbound.objects.filter(
+        status='completed',
+        outbound_date__gte=thirty_days_ago,
+    ).aggregate(total=Sum('quantity'))['total'] or Decimal('0')
+
+    turnover_rate = Decimal('0')
+    if total_stock > 0:
+        avg_stock = total_stock
+        turnover_rate = (outbound_30d / avg_stock * Decimal('100')).quantize(Decimal('0.01'))
+
+    warning_messages = Message.objects.filter(
+        message_type=Message.TYPE_WARNING,
+        is_read=False,
+    ).order_by('-created_at')[:20]
+
+    warnings = []
+    for msg in warning_messages:
+        warnings.append({
+            'id': msg.id,
+            'title': msg.title,
+            'content': msg.content,
+            'level': 'critical' if '紧缺' in msg.title else 'warning',
+            'time': msg.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        })
+
+    if not warnings:
+        warnings = [
+            {
+                'id': 0,
+                'title': '系统运行正常',
+                'content': '当前无预警信息，库房运营态势良好',
+                'level': 'info',
+                'time': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
+            }
+        ]
+
+    return JsonResponse({
+        'bar_chart': {
+            'labels': ['今日', '本周', '本月'],
+            'inbound': [
+                float(today_in_qty),
+                float(week_in_qty),
+                float(month_in_qty),
+            ],
+            'outbound': [
+                float(today_out_qty),
+                float(week_out_qty),
+                float(month_out_qty),
+            ],
+        },
+        'flip_cards': {
+            'total_stock': float(total_stock),
+            'turnover_rate': float(turnover_rate),
+            'today_in_count': today_in_count,
+            'today_out_count': today_out_count,
+        },
+        'warnings': warnings,
+    })

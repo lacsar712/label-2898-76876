@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/data_screen.css">
+{% endblock %}
+
+{% block body_class %}data-screen-body{% endblock %}
+
+{% block container_class %}data-screen-container{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block header %}
+<header class="data-screen-header">
+    <a href="/" class="back-btn" title="返回">
+        <i class="bi bi-arrow-left"></i>
+        <span>返回</span>
+    </a>
+    <div class="header-center">
+        <h1 class="system-title">
+            <i class="bi bi-hdd-rack"></i>
+            第六师兵团库房管理系统 - 运营态势大屏
+        </h1>
+        <div class="current-time" id="current-time">--:--:--</div>
+    </div>
+    <div class="header-right">
+        <span class="status-dot"></span>
+        <span class="status-text">实时监控中</span>
+    </div>
+</header>
+{% endblock %}
+
+{% block main_path %}{% endblock %}
+
+{% block content %}
+<div class="data-screen-layout">
+    <div class="screen-column left-column">
+        <div class="screen-panel">
+            <div class="panel-header">
+                <i class="bi bi-bar-chart-fill"></i>
+                <span>出入库对比分析</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-legend">
+                    <span class="legend-item"><span class="legend-dot legend-inbound"></span>入库</span>
+                    <span class="legend-item"><span class="legend-dot legend-outbound"></span>出库</span>
+                </div>
+                <div class="bar-chart-container" id="bar-chart">
+                    <div class="skeleton skeleton-chart"></div>
+                    <svg class="bar-svg" style="display:none"></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="screen-column center-column">
+        <div class="flip-cards-row">
+            <div class="flip-card" id="flip-stock">
+                <div class="flip-card-label">库存总量</div>
+                <div class="flip-card-value">
+                    <div class="flip-digits" id="digits-stock">
+                        <span class="digit">0</span>
+                    </div>
+                    <div class="flip-card-unit">件</div>
+                </div>
+                <div class="flip-card-sub">当前在库物资总数</div>
+            </div>
+            <div class="flip-card" id="flip-turnover">
+                <div class="flip-card-label">月周转率</div>
+                <div class="flip-card-value">
+                    <div class="flip-digits" id="digits-turnover">
+                        <span class="digit">0</span>
+                    </div>
+                    <div class="flip-card-unit">%</div>
+                </div>
+                <div class="flip-card-sub">近30天库存周转效率</div>
+            </div>
+        </div>
+        <div class="flip-cards-row">
+            <div class="flip-card" id="flip-inbound">
+                <div class="flip-card-label">今日入库笔数</div>
+                <div class="flip-card-value">
+                    <div class="flip-digits" id="digits-inbound">
+                        <span class="digit">0</span>
+                    </div>
+                    <div class="flip-card-unit">笔</div>
+                </div>
+                <div class="flip-card-sub">今日入库操作次数</div>
+            </div>
+            <div class="flip-card" id="flip-outbound">
+                <div class="flip-card-label">今日出库笔数</div>
+                <div class="flip-card-value">
+                    <div class="flip-digits" id="digits-outbound">
+                        <span class="digit">0</span>
+                    </div>
+                    <div class="flip-card-unit">笔</div>
+                </div>
+                <div class="flip-card-sub">今日出库操作次数</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="screen-column right-column">
+        <div class="screen-panel warning-panel">
+            <div class="panel-header">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>预警信息播报</span>
+                <span class="warning-badge" id="warning-badge">0</span>
+            </div>
+            <div class="panel-body">
+                <div class="warning-scroll-container" id="warning-scroll">
+                    <div class="warning-list" id="warning-list">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="decor-line decor-top"></div>
+<div class="decor-line decor-bottom"></div>
+<div class="decor-corner corner-tl"></div>
+<div class="decor-corner corner-tr"></div>
+<div class="decor-corner corner-bl"></div>
+<div class="decor-corner corner-br"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/data_screen.js"></script>
+{% endblock %}
