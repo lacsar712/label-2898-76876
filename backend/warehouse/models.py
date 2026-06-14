@@ -59,7 +59,7 @@ class GoodsInbound(models.Model):
     )
     quantity = models.DecimalField('入库数量', max_digits=12, decimal_places=2)
     supplier_ref = models.ForeignKey(
-        Supplier, on_delete=models.PROTECT,
+        'Supplier', on_delete=models.PROTECT,
         verbose_name='供应商', related_name='inbound_records',
         null=True, blank=True,
     )
