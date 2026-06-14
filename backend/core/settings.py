@@ -14,8 +14,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'warehouse',
+    'warehouse.apps.WarehouseConfig',
 ]
+
+OPERATION_LOG_RETENTION_DAYS = 90
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

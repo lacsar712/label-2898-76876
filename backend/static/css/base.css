@@ -73,6 +73,24 @@ body {
     padding: 20px 0;
     display: flex;
     flex-direction: column;
+    height: 100vh;
+}
+
+.sidebar-tech nav {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.sidebar-footer {
+    border-top: 1px solid rgba(0, 210, 255, 0.2);
+    padding-top: 10px;
+    margin-top: auto;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-footer .menu-item {
+    color: var(--primary-blue);
+    font-weight: 500;
 }
 
 .sidebar-brand {

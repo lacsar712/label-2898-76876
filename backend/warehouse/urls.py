@@ -56,4 +56,9 @@ urlpatterns = [
     path('api/zone/detail/<int:zone_id>/', views.api_zone_detail, name='api-zone-detail'),
     path('api/zone/create/', views.api_zone_create, name='api-zone-create'),
     path('api/zone/update-status/<int:zone_id>/', views.api_zone_update_status, name='api-zone-update-status'),
+    path('operation-log/', views.operation_log_page, name='operation-log'),
+    path('api/operation-log/list/', views.api_operation_log_list, name='api-operation-log-list'),
+    path('api/operation-log/detail/<int:log_id>/', views.api_operation_log_detail, name='api-operation-log-detail'),
+    path('api/operation-log/archive/', views.api_operation_log_archive, name='api-operation-log-archive'),
+    path('api/operation-log/stats/', views.api_operation_log_stats, name='api-operation-log-stats'),
 ]

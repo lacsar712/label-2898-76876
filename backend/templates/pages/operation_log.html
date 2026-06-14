@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/operation_log.css">
+{% endblock %}
+
+{% block content %}
+<div class="oplog-container">
+
+    <div class="oplog-header-panel">
+        <div class="panel-title">
+            <i class="bi bi-journal-text"></i> 操作日志
+            <div class="panel-actions">
+                <button id="btn-archive" class="btn-tech btn-sm">
+                    <i class="bi bi-archive"></i> 归档过期日志
+                </button>
+                <button id="btn-refresh" class="btn-tech btn-sm">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+        </div>
+
+        <div class="oplog-stats-bar">
+            <div class="stat-card">
+                <i class="bi bi-list-check stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-value" id="stat-total">0</span>
+                    <span class="stat-label">日志总数</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="bi bi-calendar-day stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-value" id="stat-today">0</span>
+                    <span class="stat-label">今日操作</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="bi bi-archive stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-value" id="stat-archived">0</span>
+                    <span class="stat-label">已归档</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="bi bi-clock-history stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-value" id="stat-retention">90</span>
+                    <span class="stat-label">保留天数</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="oplog-filter-bar">
+            <div class="filter-item">
+                <label>操作类型</label>
+                <select id="filter-action-type" class="input-tech filter-input">
+                    <option value="all">全部操作类型</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>操作人</label>
+                <input type="text" id="filter-operator" class="input-tech filter-input" placeholder="输入操作人姓名">
+            </div>
+            <div class="filter-item">
+                <label>开始日期</label>
+                <input type="date" id="filter-date-from" class="input-tech filter-input">
+            </div>
+            <div class="filter-item">
+                <label>结束日期</label>
+                <input type="date" id="filter-date-to" class="input-tech filter-input">
+            </div>
+            <div class="filter-actions">
+                <button id="btn-filter" class="btn-tech btn-sm">查询</button>
+                <button id="btn-reset-filter" class="btn-tech btn-sm btn-cancel">重置</button>
+            </div>
+        </div>
+
+        <div class="filter-stats">
+            <span id="oplog-count" class="stats-text">共加载 0 条日志</span>
+        </div>
+    </div>
+
+    <div class="oplog-timeline-panel">
+        <div id="oplog-timeline" class="oplog-timeline">
+            <div class="empty-state-card">
+                <i class="bi bi-journal-text"></i>
+                <p>正在加载操作日志...</p>
+            </div>
+        </div>
+
+        <div class="pagination-bar" id="pagination-bar" style="display:none;">
+            <button id="btn-prev" class="btn-tech btn-sm">上一页</button>
+            <span id="page-info" class="page-info">第 1 / 1 页</span>
+            <button id="btn-next" class="btn-tech btn-sm">下一页</button>
+        </div>
+    </div>
+
+</div>
+
+<div id="oplog-detail-modal" class="detail-modal-overlay">
+    <div class="detail-modal-tech">
+        <div class="detail-modal-header">
+            <h3><i class="bi bi-info-circle"></i> 日志详情</h3>
+            <button class="detail-modal-close" id="detail-modal-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="detail-modal-body" id="detail-modal-body">
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/operation_log.js"></script>
+{% endblock %}

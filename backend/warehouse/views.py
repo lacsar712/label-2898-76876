@@ -5,6 +5,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 import json
 import csv
 from datetime import timedelta, datetime
@@ -14,9 +15,27 @@ from decimal import Decimal
 from .models import (
     GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
     Warehouse, WarehouseZone, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
-    Supplier, SupplierRatingLog,
+    Supplier, SupplierRatingLog, OperationLog, OperationLogArchive,
 )
 from django.db.models import Max, Sum
+
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def log_operation(request, action_type, target_object='', detail=None):
+    operator = request.user.username if request.user.is_authenticated else 'system'
+    OperationLog.log(
+        action_type=action_type,
+        operator=operator,
+        target_object=target_object,
+        ip_address=get_client_ip(request),
+        detail=detail or {},
+    )
 
 
 def user_login(request):
@@ -240,6 +259,19 @@ def api_outbound_create(request):
 
     variety.stock_quantity -= quantity
     variety.save(update_fields=['stock_quantity'])
+
+    log_operation(
+        request,
+        OperationLog.ACTION_OUTBOUND,
+        f'出库记录-{outbound_no}',
+        {
+            'outbound_no': outbound_no,
+            'variety_name': variety.name,
+            'quantity': str(quantity),
+            'receiving_unit': receiving_unit,
+            'receiver': receiver,
+        },
+    )
 
     return JsonResponse({
         'success': True,
@@ -889,6 +921,18 @@ def api_transfer_approve(request, order_id):
         remark=remark or msg,
     )
 
+    log_operation(
+        request,
+        OperationLog.ACTION_APPROVE if action == 'approve' else OperationLog.ACTION_REJECT,
+        f'调拨单-{order.transfer_no}',
+        {
+            'transfer_no': order.transfer_no,
+            'approver': approver,
+            'action': action,
+            'remark': remark,
+        },
+    )
+
     return JsonResponse({
         'success': True,
         'message': msg + '成功',
@@ -967,6 +1011,20 @@ def api_transfer_execute(request, order_id):
         action=TransferOrderLog.ACTION_EXECUTE,
         operator=executor,
         remark='执行调拨完成',
+    )
+
+    log_operation(
+        request,
+        OperationLog.ACTION_EXECUTE,
+        f'调拨单-{order.transfer_no}',
+        {
+            'transfer_no': order.transfer_no,
+            'executor': executor,
+            'variety_name': order.variety.name if order.variety else '',
+            'quantity': str(order.quantity),
+            'source_warehouse': order.source_warehouse.name if order.source_warehouse else '',
+            'target_warehouse': order.target_warehouse.name if order.target_warehouse else '',
+        },
     )
 
     return JsonResponse({
@@ -1150,6 +1208,19 @@ def api_supplier_create(request):
         remark='创建供应商，初始评级',
     )
 
+    log_operation(
+        request,
+        OperationLog.ACTION_CREATE,
+        f'供应商-{code}',
+        {
+            'supplier_code': code,
+            'supplier_name': name,
+            'contact_person': contact_person,
+            'status': status,
+            'rating': rating,
+        },
+    )
+
     return JsonResponse({
         'success': True,
         'message': '供应商创建成功',
@@ -1224,6 +1295,19 @@ def api_supplier_update(request, supplier_id):
             remark=rating_remark or '评级变更',
         )
 
+    log_operation(
+        request,
+        OperationLog.ACTION_UPDATE,
+        f'供应商-{code}',
+        {
+            'supplier_code': code,
+            'supplier_name': name,
+            'old_rating': old_rating,
+            'new_rating': rating,
+            'status': status,
+        },
+    )
+
     return JsonResponse({
         'success': True,
         'message': '供应商更新成功',
@@ -1243,7 +1327,18 @@ def api_supplier_delete(request, supplier_id):
         return JsonResponse({'success': False, 'message': '供应商不存在'}, status=404)
 
     supplier_name = supplier.name
+    supplier._deleted_by = request.user.username if request.user.is_authenticated else 'system'
     supplier.delete()
+
+    log_operation(
+        request,
+        OperationLog.ACTION_DELETE,
+        f'供应商-{supplier.code}',
+        {
+            'supplier_code': supplier.code,
+            'supplier_name': supplier_name,
+        },
+    )
 
     return JsonResponse({
         'success': True,
@@ -1372,6 +1467,19 @@ def api_inbound_create(request):
 
     variety.stock_quantity += quantity
     variety.save(update_fields=['stock_quantity'])
+
+    log_operation(
+        request,
+        OperationLog.ACTION_INBOUND,
+        f'入库记录-{inbound_no}',
+        {
+            'inbound_no': inbound_no,
+            'variety_name': variety.name,
+            'quantity': str(quantity),
+            'supplier': supplier_name,
+            'operator': operator,
+        },
+    )
 
     return JsonResponse({
         'success': True,
@@ -1717,4 +1825,172 @@ def api_zone_update_status(request, zone_id):
             'status': zone.get_status_display(),
             'status_code': zone.status,
         },
+    })
+
+
+@login_required
+def operation_log_page(request):
+    return render(request, 'pages/operation_log.html', {
+        'title': '操作日志',
+        'page_name': 'operation-log',
+    })
+
+
+@login_required
+def api_operation_log_list(request):
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    action_type = request.GET.get('action_type', '')
+    operator = request.GET.get('operator', '').strip()
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    include_archive = request.GET.get('include_archive', 'false') == 'true'
+
+    qs = OperationLog.objects.all()
+
+    if action_type and action_type != 'all':
+        qs = qs.filter(action_type=action_type)
+    if operator:
+        qs = qs.filter(operator__icontains=operator)
+    if date_from:
+        try:
+            qs = qs.filter(action_time__date__gte=date_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            qs = qs.filter(action_time__date__lte=date_to)
+        except ValueError:
+            pass
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    logs = qs[start:end]
+
+    items = []
+    for log in logs:
+        items.append({
+            'id': log.id,
+            'action_type': log.get_action_type_display(),
+            'action_type_code': log.action_type,
+            'operator': log.operator,
+            'target_object': log.target_object,
+            'ip_address': log.ip_address or '',
+            'action_time': log.action_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'detail': log.detail,
+            'is_archived': False,
+        })
+
+    action_types = [{'code': 'all', 'name': '全部操作类型'}]
+    for code, name in OperationLog.ACTION_CHOICES:
+        action_types.append({'code': code, 'name': name})
+
+    return JsonResponse({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total + page_size - 1) // page_size if total > 0 else 0,
+        'action_types': action_types,
+    })
+
+
+@login_required
+def api_operation_log_detail(request, log_id):
+    try:
+        log = OperationLog.objects.get(pk=log_id)
+        is_archived = False
+    except OperationLog.DoesNotExist:
+        try:
+            log = OperationLogArchive.objects.get(pk=log_id)
+            is_archived = True
+        except OperationLogArchive.DoesNotExist:
+            return JsonResponse({'error': '日志不存在'}, status=404)
+
+    return JsonResponse({
+        'id': log.id,
+        'action_type': log.get_action_type_display(),
+        'action_type_code': log.action_type,
+        'operator': log.operator,
+        'target_object': log.target_object,
+        'ip_address': log.ip_address or '',
+        'action_time': log.action_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'detail': log.detail,
+        'is_archived': is_archived,
+        'archived_at': log.archived_at.strftime('%Y-%m-%d %H:%M:%S') if is_archived and hasattr(log, 'archived_at') else '',
+    })
+
+
+@login_required
+def api_operation_log_archive(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    retention_days = getattr(settings, 'OPERATION_LOG_RETENTION_DAYS', 90)
+    cutoff_date = timezone.now() - timedelta(days=retention_days)
+
+    logs_to_archive = OperationLog.objects.filter(action_time__lt=cutoff_date)
+    count = logs_to_archive.count()
+
+    if count == 0:
+        return JsonResponse({
+            'success': True,
+            'message': '没有需要归档的日志',
+            'archived_count': 0,
+        })
+
+    archived_logs = []
+    for log in logs_to_archive:
+        archived_logs.append(OperationLogArchive(
+            action_type=log.action_type,
+            operator=log.operator,
+            target_object=log.target_object,
+            ip_address=log.ip_address,
+            action_time=log.action_time,
+            detail=log.detail,
+        ))
+
+    OperationLogArchive.objects.bulk_create(archived_logs, batch_size=500)
+    logs_to_archive.delete()
+
+    log_operation(
+        request,
+        OperationLog.ACTION_ARCHIVE,
+        '操作日志归档',
+        {
+            'retention_days': retention_days,
+            'cutoff_date': cutoff_date.strftime('%Y-%m-%d'),
+            'archived_count': count,
+        },
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': f'成功归档 {count} 条日志',
+        'archived_count': count,
+    })
+
+
+@login_required
+def api_operation_log_stats(request):
+    total = OperationLog.objects.count()
+    archived_count = OperationLogArchive.objects.count()
+
+    today = timezone.now().date()
+    today_count = OperationLog.objects.filter(action_time__date=today).count()
+
+    action_stats = {}
+    for code, name in OperationLog.ACTION_CHOICES:
+        action_stats[code] = {
+            'name': name,
+            'count': OperationLog.objects.filter(action_type=code).count(),
+        }
+
+    return JsonResponse({
+        'total': total,
+        'archived_count': archived_count,
+        'today_count': today_count,
+        'action_stats': action_stats,
+        'retention_days': getattr(settings, 'OPERATION_LOG_RETENTION_DAYS', 90),
     })

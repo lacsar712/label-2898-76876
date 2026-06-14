@@ -410,3 +410,76 @@ class SupplierRatingLog(models.Model):
 
     def __str__(self):
         return f'{self.supplier.name} {self.old_rating}→{self.new_rating}'
+
+
+class OperationLog(models.Model):
+    ACTION_LOGIN = 'login'
+    ACTION_LOGOUT = 'logout'
+    ACTION_INBOUND = 'inbound'
+    ACTION_OUTBOUND = 'outbound'
+    ACTION_APPROVE = 'approve'
+    ACTION_REJECT = 'reject'
+    ACTION_EXECUTE = 'execute'
+    ACTION_DELETE = 'delete'
+    ACTION_CREATE = 'create'
+    ACTION_UPDATE = 'update'
+    ACTION_ARCHIVE = 'archive'
+
+    ACTION_CHOICES = [
+        (ACTION_LOGIN, '用户登录'),
+        (ACTION_LOGOUT, '用户登出'),
+        (ACTION_INBOUND, '入库提交'),
+        (ACTION_OUTBOUND, '出库提交'),
+        (ACTION_APPROVE, '审批通过'),
+        (ACTION_REJECT, '审批驳回'),
+        (ACTION_EXECUTE, '执行操作'),
+        (ACTION_DELETE, '删除记录'),
+        (ACTION_CREATE, '创建记录'),
+        (ACTION_UPDATE, '更新记录'),
+        (ACTION_ARCHIVE, '日志归档'),
+    ]
+
+    action_type = models.CharField('操作类型', max_length=20, choices=ACTION_CHOICES, db_index=True)
+    operator = models.CharField('操作人', max_length=100, db_index=True)
+    target_object = models.CharField('操作对象', max_length=200, blank=True, default='')
+    ip_address = models.GenericIPAddressField('IP地址', null=True, blank=True)
+    action_time = models.DateTimeField('操作时间', default=timezone.now, db_index=True)
+    detail = models.JSONField('详情JSON', default=dict, blank=True)
+
+    class Meta:
+        verbose_name = '操作日志'
+        verbose_name_plural = '操作日志'
+        ordering = ['-action_time', '-id']
+
+    def __str__(self):
+        return f'[{self.get_action_type_display()}] {self.operator} - {self.target_object}'
+
+    @classmethod
+    def log(cls, action_type, operator, target_object='', ip_address=None, detail=None):
+        detail = detail or {}
+        return cls.objects.create(
+            action_type=action_type,
+            operator=operator,
+            target_object=target_object,
+            ip_address=ip_address,
+            detail=detail,
+        )
+
+
+class OperationLogArchive(models.Model):
+    action_type = models.CharField('操作类型', max_length=20, choices=OperationLog.ACTION_CHOICES, db_index=True)
+    operator = models.CharField('操作人', max_length=100, db_index=True)
+    target_object = models.CharField('操作对象', max_length=200, blank=True, default='')
+    ip_address = models.GenericIPAddressField('IP地址', null=True, blank=True)
+    action_time = models.DateTimeField('操作时间', db_index=True)
+    detail = models.JSONField('详情JSON', default=dict, blank=True)
+    archived_at = models.DateTimeField('归档时间', default=timezone.now, db_index=True)
+
+    class Meta:
+        verbose_name = '操作日志归档'
+        verbose_name_plural = '操作日志归档'
+        ordering = ['-action_time', '-id']
+
+    def __str__(self):
+        return f'[归档][{self.get_action_type_display()}] {self.operator} - {self.target_object}'
+
