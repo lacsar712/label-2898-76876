@@ -70,4 +70,9 @@ urlpatterns = [
     path('api/message/delete/<int:message_id>/', views.api_message_delete, name='api-message-delete'),
     path('data-screen/', views.data_screen_page, name='data-screen'),
     path('api/data-screen/overview/', views.api_data_screen_overview, name='api-data-screen-overview'),
+    path('profile-settings/', views.profile_settings_page, name='profile-settings'),
+    path('api/profile/basic-info/', views.api_profile_basic_info, name='api-profile-basic-info'),
+    path('api/profile/update-email/', views.api_profile_update_email, name='api-profile-update-email'),
+    path('api/profile/change-password/', views.api_profile_change_password, name='api-profile-change-password'),
+    path('api/profile/preferences/', views.api_profile_preferences, name='api-profile-preferences'),
 ]

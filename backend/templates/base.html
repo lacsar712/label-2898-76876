@@ -118,9 +118,18 @@
             <!-- 顶部标题框 -->
             <header class="header-tech">
                 {% if user.is_authenticated %}
-                <div class="user-profile" onclick="handleLogout()">
+                <div class="user-profile" id="global-user-profile">
                     <span>{{ user.username }}</span>
                     <i class="bi bi-person-circle"></i>
+                </div>
+                <div class="user-panel-dropdown" id="global-user-dropdown">
+                    <a href="/profile-settings/" class="user-panel-dropdown-item">
+                        <i class="bi bi-gear-fill"></i> 个人设置
+                    </a>
+                    <div class="user-panel-dropdown-divider"></div>
+                    <div class="user-panel-dropdown-item" id="global-dropdown-logout">
+                        <i class="bi bi-box-arrow-right"></i> 退出登录
+                    </div>
                 </div>
                 {% endif %}
             </header>

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/profile_settings.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="profile-settings-container">
+    <div class="page-title">
+        <i class="bi bi-person-gear"></i>
+        个人设置
+    </div>
+
+    <div class="profile-card">
+        <div class="tabs-wrapper">
+            <ul class="tabs-nav">
+                <li class="tab-item active" data-tab="basic">
+                    <i class="bi bi-person-fill"></i>
+                    基本信息
+                </li>
+                <li class="tab-item" data-tab="password">
+                    <i class="bi bi-shield-lock-fill"></i>
+                    修改密码
+                </li>
+                <li class="tab-item" data-tab="preferences">
+                    <i class="bi bi-sliders2"></i>
+                    操作偏好
+                </li>
+            </ul>
+            <div class="tab-glow-indicator"></div>
+        </div>
+
+        <div class="tab-content-area">
+            <div id="panel-basic" class="tab-panel active">
+                <div class="form-section-title">
+                    <i class="bi bi-info-circle"></i>
+                    账号基本信息
+                </div>
+
+                <div class="info-row">
+                    <div class="info-label">用户名</div>
+                    <div class="info-value readonly" id="info-username">-</div>
+                </div>
+
+                <div class="info-row">
+                    <div class="info-label">邮箱地址</div>
+                    <div class="email-edit-wrapper">
+                        <input type="email" class="email-input" id="info-email" disabled placeholder="请输入邮箱">
+                        <button class="btn-icon" id="btn-email-edit" title="编辑">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-icon save" id="btn-email-save" style="display:none" title="保存">
+                            <i class="bi bi-check-lg"></i>
+                        </button>
+                        <button class="btn-icon cancel" id="btn-email-cancel" style="display:none" title="取消">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="info-row">
+                    <div class="info-label">注册时间</div>
+                    <div class="info-value readonly" id="info-date-joined">-</div>
+                </div>
+
+                <div style="margin-top: 25px;">
+                    <div class="save-status" id="basic-save-status"></div>
+                </div>
+            </div>
+
+            <div id="panel-password" class="tab-panel">
+                <div class="form-section-title">
+                    <i class="bi bi-key-fill"></i>
+                    修改登录密码
+                </div>
+
+                <form id="password-form" onsubmit="return false;">
+                    <div class="form-group">
+                        <label class="form-label">原密码</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" class="password-input" id="old-password" placeholder="请输入原密码" autocomplete="current-password">
+                            <button type="button" class="password-toggle" id="toggle-old-pwd">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">新密码</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" class="password-input" id="new-password" placeholder="请输入新密码" autocomplete="new-password">
+                            <button type="button" class="password-toggle" id="toggle-new-pwd">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-strength">
+                            <div class="password-strength-bar" id="password-strength-bar"></div>
+                        </div>
+                        <div class="password-strength-text" id="password-strength-text">请输入至少8位，包含字母和数字</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">确认新密码</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" class="password-input" id="confirm-password" placeholder="请再次输入新密码" autocomplete="new-password">
+                            <button type="button" class="password-toggle" id="toggle-confirm-pwd">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="password-hint">
+                        <i class="bi bi-info-circle"></i>
+                        密码要求：至少8位字符，必须包含字母和数字；修改成功后需重新登录
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-tech">
+                            <i class="bi bi-shield-check"></i>
+                            确认修改
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="save-status" id="password-save-status"></div>
+                    </div>
+                </form>
+            </div>
+
+            <div id="panel-preferences" class="tab-panel">
+                <div class="form-section-title">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    个性化操作偏好
+                </div>
+
+                <div class="preference-item">
+                    <div class="preference-info">
+                        <div class="preference-title">默认分页条数</div>
+                        <div class="preference-desc">设置列表页面默认每页显示的数据条数</div>
+                    </div>
+                    <select class="page-size-select" id="pref-page-size">
+                        <option value="10">10 条 / 页</option>
+                        <option value="20">20 条 / 页</option>
+                        <option value="50">50 条 / 页</option>
+                        <option value="100">100 条 / 页</option>
+                    </select>
+                </div>
+
+                <div class="preference-item">
+                    <div class="preference-info">
+                        <div class="preference-title">页面过渡动画</div>
+                        <div class="preference-desc">启用Tab切换与内容加载的动画效果</div>
+                    </div>
+                    <div class="switch-toggle" id="pref-animation"></div>
+                </div>
+
+                <div class="preference-item">
+                    <div class="preference-info">
+                        <div class="preference-title">操作提示音</div>
+                        <div class="preference-desc">在操作成功或提示时播放声音反馈</div>
+                    </div>
+                    <div class="switch-toggle" id="pref-sound"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn-tech" id="btn-prefs-save">
+                        <i class="bi bi-sd-card-fill"></i>
+                        保存设置
+                    </button>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="save-status" id="prefs-save-status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/profile_settings.js' %}"></script>
+{% endblock %}

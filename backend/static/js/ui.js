@@ -51,10 +51,36 @@ const UI = {
     checkCaptcha: (containerId, value) => {
         const container = document.getElementById(containerId);
         return parseInt(value) === parseInt(container.dataset.result);
+    },
+
+    initUserDropdown: () => {
+        const profile = document.getElementById('global-user-profile');
+        const dropdown = document.getElementById('global-user-dropdown');
+        const logoutItem = document.getElementById('global-dropdown-logout');
+        if (!profile || !dropdown) return;
+
+        profile.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (dropdown.contains(e.target) || profile.contains(e.target)) return;
+            dropdown.classList.remove('show');
+        });
+
+        if (logoutItem && typeof handleLogout !== 'undefined') {
+            logoutItem.addEventListener('click', handleLogout);
+        } else if (logoutItem) {
+            logoutItem.addEventListener('click', () => {
+                window.location.href = '/logout/';
+            });
+        }
     }
 };
 
 // 页面加载完成后隐藏加载器
 window.addEventListener('load', () => {
     setTimeout(UI.hideLoader, 500);
+    UI.initUserDropdown();
 });

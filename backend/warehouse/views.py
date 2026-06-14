@@ -15,7 +15,7 @@ from decimal import Decimal
 from .models import (
     GoodsVariety, GoodsCategory, GoodsInbound, GoodsOutbound, generate_outbound_no,
     Warehouse, WarehouseZone, WarehouseStock, TransferOrder, TransferOrderLog, generate_transfer_no,
-    Supplier, SupplierRatingLog, OperationLog, OperationLogArchive, Message,
+    Supplier, SupplierRatingLog, OperationLog, OperationLogArchive, Message, UserPreference,
 )
 from django.db.models import Max, Sum
 
@@ -2363,3 +2363,162 @@ def api_data_screen_overview(request):
         },
         'warnings': warnings,
     })
+
+
+@login_required
+def profile_settings_page(request):
+    return render(request, 'pages/profile_settings.html', {
+        'title': '个人设置',
+        'page_name': 'profile-settings',
+    })
+
+
+@login_required
+def api_profile_basic_info(request):
+    user = request.user
+    return JsonResponse({
+        'username': user.username,
+        'email': user.email or '',
+        'date_joined': user.date_joined.strftime('%Y-%m-%d %H:%M:%S'),
+    })
+
+
+@login_required
+@transaction.atomic
+def api_profile_update_email(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    email = data.get('email', '').strip()
+
+    if not email:
+        return JsonResponse({'success': False, 'message': '邮箱不能为空'})
+
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return JsonResponse({'success': False, 'message': '邮箱格式不正确'})
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    if User.objects.filter(email=email).exclude(pk=request.user.pk).exists():
+        return JsonResponse({'success': False, 'message': '该邮箱已被其他用户使用'})
+
+    user = request.user
+    old_email = user.email or '(空)'
+    user.email = email
+    user.save(update_fields=['email'])
+
+    log_operation(
+        request,
+        OperationLog.ACTION_UPDATE,
+        '个人基本信息',
+        {'field': 'email', 'old_value': old_email, 'new_value': email},
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '邮箱更新成功',
+        'email': email,
+    })
+
+
+@login_required
+@transaction.atomic
+def api_profile_change_password(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+    confirm_password = data.get('confirm_password', '')
+
+    if not old_password or not new_password or not confirm_password:
+        return JsonResponse({'success': False, 'message': '请填写所有密码字段'})
+
+    if not request.user.check_password(old_password):
+        return JsonResponse({'success': False, 'message': '原密码错误'})
+
+    if len(new_password) < 8:
+        return JsonResponse({'success': False, 'message': '新密码长度至少8位'})
+
+    import re
+    if not re.search(r'[A-Za-z]', new_password) or not re.search(r'[0-9]', new_password):
+        return JsonResponse({'success': False, 'message': '新密码必须包含字母和数字'})
+
+    if new_password != confirm_password:
+        return JsonResponse({'success': False, 'message': '两次输入的新密码不一致'})
+
+    if new_password == old_password:
+        return JsonResponse({'success': False, 'message': '新密码不能与原密码相同'})
+
+    request.user.set_password(new_password)
+    request.user.save(update_fields=['password'])
+
+    log_operation(
+        request,
+        OperationLog.ACTION_UPDATE,
+        '修改密码',
+        {'password_changed': True},
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': '密码修改成功，请重新登录',
+    })
+
+
+@login_required
+def api_profile_preferences(request):
+    pref = UserPreference.get_or_create_for_user(request.user)
+
+    if request.method == 'GET':
+        return JsonResponse(pref.to_dict())
+
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': '数据格式错误'}, status=400)
+
+        page_size = data.get('default_page_size')
+        if page_size is not None:
+            valid_sizes = [10, 20, 50, 100]
+            if page_size not in valid_sizes:
+                return JsonResponse({'success': False, 'message': '无效的分页条数'})
+            pref.default_page_size = page_size
+
+        animation = data.get('page_transition_animation')
+        if animation is not None:
+            pref.page_transition_animation = bool(animation)
+
+        sound = data.get('operation_sound')
+        if sound is not None:
+            pref.operation_sound = bool(sound)
+
+        pref.save()
+
+        log_operation(
+            request,
+            OperationLog.ACTION_UPDATE,
+            '操作偏好设置',
+            pref.to_dict(),
+        )
+
+        return JsonResponse({
+            'success': True,
+            'message': '操作偏好保存成功',
+            'preferences': pref.to_dict(),
+        })
+
+    return JsonResponse({'success': False, 'message': '请求方法不允许'}, status=405)

@@ -534,3 +534,42 @@ class Message(models.Model):
     def get_unread_count(cls, receiver):
         return cls.objects.filter(receiver=receiver, is_read=False).count()
 
+
+class UserPreference(models.Model):
+    user = models.OneToOneField(
+        'auth.User', on_delete=models.CASCADE,
+        verbose_name='用户', related_name='preferences',
+    )
+    default_page_size = models.IntegerField(
+        '默认分页条数',
+        choices=[(10, '10条'), (20, '20条'), (50, '50条'), (100, '100条')],
+        default=20,
+    )
+    page_transition_animation = models.BooleanField(
+        '页面过渡动画', default=True,
+    )
+    operation_sound = models.BooleanField(
+        '操作提示音', default=True,
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '用户偏好'
+        verbose_name_plural = '用户偏好'
+
+    def __str__(self):
+        return f'{self.user.username} 的偏好设置'
+
+    @classmethod
+    def get_or_create_for_user(cls, user):
+        pref, created = cls.objects.get_or_create(user=user)
+        return pref
+
+    def to_dict(self):
+        return {
+            'default_page_size': self.default_page_size,
+            'page_transition_animation': self.page_transition_animation,
+            'operation_sound': self.operation_sound,
+        }
+
